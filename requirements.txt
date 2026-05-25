@@ -1,0 +1,11 @@
+PyQt5>=5.15.9
+opencv-python>=4.8.0
+ultralytics>=8.0.0
+insightface>=0.7.3
+onnxruntime>=1.16.0         # Hoặc onnxruntime-gpu nếu muốn chạy InsightFace trên GPU
+numpy>=1.24.0
+
+# Lưu ý: 
+# - Thư viện 'torch' sẽ tự động được cài kèm khi cài 'ultralytics'. 
+#   Tuy nhiên, để chạy YOLOv8 trên GPU, bạn cần cài đặt phiên bản PyTorch CUDA 
+#   phù hợp với máy tính tại trang chủ pytorch.org.
