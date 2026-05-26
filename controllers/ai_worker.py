@@ -14,6 +14,7 @@ from core.face_engine import FaceEngine
 from models.vector_store import VectorStore
 from core.tracker import SimpleTracker
 from controllers.threads import CameraThread, DetectThread, TrackThread, FaceThread, StreamThread
+from config import QUEUE_MAXSIZE
 
 logger = logging.getLogger(__name__)
 
@@ -43,12 +44,13 @@ class AIWorker(QThread):
 
         # Shared state giữa AI pipeline và Display pipeline
         self.shared_state = {
-            "tracks_info": [],
-            "lock": threading.Lock()
+            "tracks_info":    [],
+            "display_frame":  None,
+            "lock":           threading.Lock()
         }
 
         # Tạo stream_thread sớm
-        self.stream_queue = queue.Queue(maxsize=3)
+        self.stream_queue = queue.Queue(maxsize=QUEUE_MAXSIZE)
         self._stream_thread = StreamThread(self.stream_queue, self.shared_state)
 
     @property
@@ -86,9 +88,9 @@ class AIWorker(QThread):
         self.model_loaded.emit()
 
         # 3. Khởi tạo Queue và Thread
-        ai_queue     = queue.Queue(maxsize=3)
-        detect_queue = queue.Queue(maxsize=3)
-        track_queue  = queue.Queue(maxsize=3)
+        ai_queue     = queue.Queue(maxsize=QUEUE_MAXSIZE)
+        detect_queue = queue.Queue(maxsize=QUEUE_MAXSIZE)
+        track_queue  = queue.Queue(maxsize=QUEUE_MAXSIZE)
 
         cam_thread    = CameraThread(self.stream_queue, ai_queue)
         detect_thread = DetectThread(ai_queue, detect_queue, self._engine)

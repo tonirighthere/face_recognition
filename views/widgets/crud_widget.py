@@ -5,9 +5,9 @@ from pathlib import Path
 from PyQt5.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QTableWidget, QTableWidgetItem,
     QPushButton, QLineEdit, QHeaderView, QMessageBox, QFrame, QLabel,
-    QComboBox, QFileDialog, QSizePolicy
+    QComboBox, QFileDialog, QSizePolicy, QDateEdit
 )
-from PyQt5.QtCore import Qt, QSize
+from PyQt5.QtCore import Qt, QSize, QDate
 from PyQt5.QtGui import QIcon, QPixmap, QFont
 
 from config import *
@@ -32,7 +32,7 @@ class CrudWidget(QWidget):
         main_layout.setContentsMargins(0, 0, 0, 0)
         main_layout.setSpacing(20)
         
-        # ─── BÊN TRÁI: DANH SÁCH & TÌM KIẾM ───────────────────────────────────
+        # BÊN TRÁI: DANH SÁCH & TÌM KIẾM
         left_panel = QFrame()
         left_panel.setStyleSheet(f"background-color: {COLOR_BG_CARD}; border-radius: 10px; border: 1px solid {COLOR_BORDER};")
         left_layout = QVBoxLayout(left_panel)
@@ -140,8 +140,10 @@ class CrudWidget(QWidget):
         self.input_hoten = QLineEdit()
         self.input_hoten.setPlaceholderText("Họ tên")
         
-        self.input_ngaysinh = QLineEdit()
-        self.input_ngaysinh.setPlaceholderText("Ngày sinh (DD/MM/YYYY)")
+        self.input_ngaysinh = QDateEdit()
+        self.input_ngaysinh.setDisplayFormat("dd/MM/yyyy")
+        self.input_ngaysinh.setCalendarPopup(True)
+        self.input_ngaysinh.setDate(QDate.currentDate())
         
         self.input_cccd = QLineEdit()
         self.input_cccd.setPlaceholderText("CMND/CCCD")
@@ -236,7 +238,15 @@ class CrudWidget(QWidget):
         self.right_panel.setVisible(True)
         self.current_edit_id = person['id']
         self.input_hoten.setText(person['ho_ten'])
-        self.input_ngaysinh.setText(person.get('ngay_sinh', ""))
+        ns_str = person.get('ngay_sinh', "")
+        date = QDate.fromString(ns_str, "yyyy-MM-dd")
+        if not date.isValid():
+            date = QDate.fromString(ns_str, "dd/MM/yyyy")
+        if date.isValid():
+            self.input_ngaysinh.setDate(date)
+        else:
+            self.input_ngaysinh.setDate(QDate.currentDate())
+            
         self.input_cccd.setText(person.get('cccd', ""))
         self.cb_gioitinh.setCurrentText(person.get('gioi_tinh', "Nam"))
         self.input_sdt.setText(person.get('dien_thoai', ""))
@@ -252,7 +262,7 @@ class CrudWidget(QWidget):
         self.current_edit_id = None
         self.current_img_path = None
         self.input_hoten.clear()
-        self.input_ngaysinh.clear()
+        self.input_ngaysinh.setDate(QDate.currentDate())
         self.input_cccd.clear()
         self.cb_gioitinh.setCurrentIndex(0)
         self.input_sdt.clear()
@@ -298,7 +308,7 @@ class CrudWidget(QWidget):
             if self.current_edit_id:
                 # Cập nhật
                 self.db.update_person(
-                    self.current_edit_id, hoten, self.input_ngaysinh.text(), cccd,
+                    self.current_edit_id, hoten, self.input_ngaysinh.date().toString("yyyy-MM-dd"), cccd,
                     self.cb_gioitinh.currentText(), self.input_sdt.text(),
                     saved_img_path, emb
                 )
@@ -306,7 +316,7 @@ class CrudWidget(QWidget):
             else:
                 # Thêm mới
                 self.db.add_person(
-                    hoten, self.input_ngaysinh.text(), cccd,
+                    hoten, self.input_ngaysinh.date().toString("yyyy-MM-dd"), cccd,
                     self.cb_gioitinh.currentText(), self.input_sdt.text(),
                     saved_img_path, emb
                 )

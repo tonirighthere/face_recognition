@@ -1,9 +1,8 @@
-import cv2
-import numpy as np
+import time
 from PyQt5.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QFrame, QSizePolicy
 )
-from PyQt5.QtCore import Qt, pyqtSlot
+from PyQt5.QtCore import Qt, pyqtSlot, QTimer
 from PyQt5.QtGui import QImage, QPixmap, QFont
 
 from config import *
@@ -19,11 +18,15 @@ class LiveViewWidget(QWidget):
 
         # Kết nối trực tiếp vào stream_thread để Qt tự dùng QueuedConnection giao frame
         # lên main thread mà không bị drop
-        self.worker.stream_thread.frame_ready.connect(self.update_frame)
         self.worker.stream_thread.recognition_result.connect(self.update_info)
         self.worker.error_occurred.connect(self.show_error)
         self.worker.status_changed.connect(lambda msg: print(f"[Worker] {msg}"))
         self.is_playing = False
+
+        # QTimer để pull frame từ shared_state (giải quyết signal flooding)
+        self._display_timer = QTimer(self)
+        self._display_timer.setInterval(1000 // DISPLAY_FPS)
+        self._display_timer.timeout.connect(self._pull_frame)
         
         self.setup_ui()
         
@@ -162,11 +165,13 @@ class LiveViewWidget(QWidget):
     def toggle_camera(self):
         if not self.is_playing:
             self.worker.start_stream()
+            self._display_timer.start()
             self.btn_toggle_cam.setText(" Tắt Camera ")
             self.btn_toggle_cam.setStyleSheet(f"QPushButton {{ background-color: {COLOR_BTN_RED}; color: white; border-radius: 5px; font-weight: bold; border: none; }}")
             self.lbl_live_status.setText("🔴 LIVE")
             self.is_playing = True
         else:
+            self._display_timer.stop()
             self.worker.stop_stream()
             self.btn_toggle_cam.setText(" Bật Camera ")
             self.btn_toggle_cam.setStyleSheet(f"QPushButton {{ background-color: {COLOR_BTN_BLUE}; color: white; border-radius: 5px; font-weight: bold; border: none; }}")
@@ -179,10 +184,17 @@ class LiveViewWidget(QWidget):
         if self.is_playing:
             self.toggle_camera()
 
-    @pyqtSlot(object)
-    def update_frame(self, frame):
+    def _pull_frame(self):
+        """QTimer callback — chạy ở main thread, chủ động kéo frame mới nhất."""
+        frame = None
+        with self.worker.shared_state["lock"]:
+            frame = self.worker.shared_state.get("display_frame")
+        if frame is None:
+            return
         pix = cv_to_qpixmap(frame)
-        self.lbl_camera.setPixmap(pix.scaled(self.lbl_camera.size(), Qt.KeepAspectRatio, Qt.SmoothTransformation))
+        self.lbl_camera.setPixmap(
+            pix.scaled(self.lbl_camera.size(), Qt.KeepAspectRatio, Qt.FastTransformation)
+        )
 
     @pyqtSlot(object)
     def update_info(self, results):

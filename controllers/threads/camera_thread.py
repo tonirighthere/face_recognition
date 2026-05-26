@@ -39,6 +39,10 @@ class CameraThread(QThread):
         real_fps = cap.get(cv2.CAP_PROP_FPS)
         logger.info(f"Camera opened: {int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))}x{int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))} @ {real_fps}FPS")
 
+        # Đo FPS thực tế từ camera
+        cam_t0    = time.time()
+        cam_count = 0
+
         while self.running:
             ret, frame = cap.read()
             if not ret:
@@ -46,19 +50,25 @@ class CameraThread(QThread):
                 time.sleep(0.05)
                 continue
 
+            cam_count += 1
+            now = time.time()
+            if now - cam_t0 >= 2.0:
+                cam_count = 0
+                cam_t0 = now
+
             # --- Push to StreamQueue (Display - 30 FPS) ---
             if self.stream_queue.full():
                 try: self.stream_queue.get_nowait()
                 except queue.Empty: pass
-            try: self.stream_queue.put(frame)
-            except: pass
+            try: self.stream_queue.put_nowait(frame)
+            except queue.Full: pass
 
             # --- Push to AI Queue (AI Pipeline) ---
             if self.ai_queue.full():
                 try: self.ai_queue.get_nowait()
                 except queue.Empty: pass
-            try: self.ai_queue.put(frame)
-            except: pass
+            try: self.ai_queue.put_nowait(frame)
+            except queue.Full: pass
 
         cap.release()
         logger.info("CameraThread stopped.")

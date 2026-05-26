@@ -58,8 +58,7 @@ class DatabaseManager:
                     );
                 """)
 
-    # ── Encode / Decode embedding ────────────────────────────────────────────
-
+    # Encode / Decode embedding 
     @staticmethod
     def encode_embedding(vec: np.ndarray) -> bytes:
         return vec.astype(np.float32).tobytes()
@@ -68,8 +67,7 @@ class DatabaseManager:
     def decode_embedding(blob: bytes) -> np.ndarray:
         return np.frombuffer(blob, dtype=np.float32)
 
-    # ── CREATE ───────────────────────────────────────────────────────────────
-
+    # CREATE
     def add_person(
         self,
         ho_ten: str,
@@ -90,11 +88,10 @@ class DatabaseManager:
             cur = conn.execute(sql, (ho_ten, ngay_sinh, cccd, gioi_tinh, dien_thoai, anh_path, emb_blob))
             return cur.lastrowid
 
-    # ── READ ─────────────────────────────────────────────────────────────────
-
+    # READ
     def get_all(self) -> List[Dict[str, Any]]:
         """Lấy toàn bộ danh sách (không kèm embedding blob để nhẹ)."""
-        sql = "SELECT id, ho_ten, ngay_sinh, cccd, gioi_tinh, dien_thoai, anh_path, created_at FROM nhan_su ORDER BY ho_ten"
+        sql = "SELECT id, ho_ten, ngay_sinh, cccd, gioi_tinh, dien_thoai, anh_path, created_at FROM nhan_su ORDER BY ho_ten COLLATE NOCASE ASC"
         with self._get_conn() as conn:
             rows = conn.execute(sql).fetchall()
         return [dict(r) for r in rows]
@@ -132,8 +129,7 @@ class DatabaseManager:
             rows = conn.execute(sql, (kw, kw)).fetchall()
         return [dict(r) for r in rows]
 
-    # ── UPDATE ───────────────────────────────────────────────────────────────
-
+    # UPDATE
     def update_person(
         self,
         person_id: int,
@@ -166,8 +162,7 @@ class DatabaseManager:
             cur = conn.execute(sql, params)
         return cur.rowcount > 0
 
-    # ── DELETE ───────────────────────────────────────────────────────────────
-
+    # DELETE
     def delete_person(self, person_id: int) -> bool:
         with self._get_conn() as conn:
             cur = conn.execute("DELETE FROM nhan_su WHERE id=?", (person_id,))

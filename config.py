@@ -16,39 +16,44 @@ STORAGE_DIR.mkdir(parents=True, exist_ok=True)
 MODEL_DIR.mkdir(parents=True, exist_ok=True)
 DB_PATH.parent.mkdir(parents=True, exist_ok=True)
 
-# ─── Camera ─────────────────────────────────────────────────────────────────
+# Camera
 CAMERA_INDEX   = 0          # Webcam mặc định
-CAMERA_WIDTH   = 1280
-CAMERA_HEIGHT  = 720
+CAMERA_WIDTH   = 640        # 640x480 = 30 FPS trên hầu hết webcam USB
+CAMERA_HEIGHT  = 480
 FRAME_SKIP     = 3          # Chỉ chạy AI mỗi N frame
 
-# ─── Face Detection (YOLOv8-face) ───────────────────────────────────────────
+#  Pipeline & Hiển thị 
+QUEUE_MAXSIZE  = 3          # Kích thước tối đa của các hàng đợi (đảm bảo Real-time)
+DISPLAY_FPS    = 30         # Tốc độ làm mới giao diện (QTimer pull)
+
+#  Face Detection (YOLOv8-face)
+
 YOLO_MODEL_NAME    = "yolov8n-face.pt"   # nano model — nhanh, nhẹ
 YOLO_CONF_THRESH   = 0.50
 YOLO_IOU_THRESH    = 0.45
 YOLO_IMG_SIZE      = 640
 YOLO_DEVICE        = "cuda"              # "cuda" nếu có GPU
 
-# ─── Face Embedding (InsightFace ArcFace) ───────────────────────────────────
+#  Face Embedding (InsightFace ArcFace) 
 INSIGHTFACE_MODEL  = "buffalo_sc"        # buffalo_sc=nhỏ/nhanh, buffalo_l=chính xác hơn
 INSIGHTFACE_DEVICE = -1                  # -1=CPU (Do InsightFace chỉ crop mặt rất nhỏ nên chạy CPU siêu nhanh, tránh lỗi thiếu CUDA rời)
 
-# ─── Vector Search ──────────────────────────────────────────────────────────
+#  Vector Search 
 SIMILARITY_THRESHOLD = 0.38             # Ngưỡng nhận diện (cosine similarity)
 TOP_K                = 1               # Số kết quả trả về
 
-# ─── ByteTrack ──────────────────────────────────────────────────────────────
+#  ByteTrack 
 TRACK_HIGH_THRESH  = 0.6
 TRACK_LOW_THRESH   = 0.1
 TRACK_MAX_LOST     = 30               # Frame tối đa giữ track khi mất
 
-# ─── UI ─────────────────────────────────────────────────────────────────────
+#  UI 
 APP_NAME    = "Face Recognition System"
 APP_VERSION = "1.0.0"
 WINDOW_W    = 1400
 WINDOW_H    = 860
 
-# ─── Màu sắc (Light theme theo mẫu) ─────────────────────────────────────────
+# Màu sắc (Light theme theo mẫu)
 COLOR_BG_MAIN   = "#ffffff"
 COLOR_BG_PANEL  = "#f8f9fa"
 COLOR_BG_CARD   = "#ffffff"
