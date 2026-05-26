@@ -91,7 +91,7 @@ def main():
     app.processEvents()
 
     # Import lazy để splash hiện trước
-    from app.main_window import MainWindow
+    from views.main_window import MainWindow
     window = MainWindow()
 
     # Ẩn splash sau 1.5 giây, hiện main window

@@ -8,7 +8,7 @@ from pathlib import Path
 # ─── Đường dẫn gốc ──────────────────────────────────────────────────────────
 BASE_DIR = Path(__file__).parent.resolve()
 STORAGE_DIR = BASE_DIR / "storage" / "photos"
-MODEL_DIR   = BASE_DIR / "models"
+MODEL_DIR   = BASE_DIR / "weights"
 DB_PATH     = BASE_DIR / "database" / "face_recognition.db"
 
 # Tạo thư mục nếu chưa có

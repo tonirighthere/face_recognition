@@ -11,10 +11,10 @@ import sys
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 from config import TRACK_MAX_LOST
+from utils.math_utils import calculate_iou, BBox
 
 logger = logging.getLogger(__name__)
 
-BBox = Tuple[int, int, int, int, float]   # x1, y1, x2, y2, conf
 
 
 class Track:
@@ -31,25 +31,19 @@ class Track:
         self.person_name: Optional[str]   = None
         self.similarity:  float           = 0.0
         self.recognized:  bool            = False
+        
+        # Theo dõi chất lượng để quyết định re-embed
+        x1, y1, x2, y2, conf = bbox
+        self.best_area = (x2 - x1) * (y2 - y1)
+        self.best_conf = conf
+        
+        self.last_embed_time: float = 0.0
+        self.embedding: Optional[np.ndarray] = None
 
     def update(self, bbox: BBox):
         self.bbox = bbox
         self.lost = 0
         self.hits += 1
-
-
-def _iou(a: BBox, b: BBox) -> float:
-    ax1, ay1, ax2, ay2, _ = a
-    bx1, by1, bx2, by2, _ = b
-    ix1 = max(ax1, bx1)
-    iy1 = max(ay1, by1)
-    ix2 = min(ax2, bx2)
-    iy2 = min(ay2, by2)
-    inter = max(0, ix2 - ix1) * max(0, iy2 - iy1)
-    area_a = (ax2 - ax1) * (ay2 - ay1)
-    area_b = (bx2 - bx1) * (by2 - by1)
-    union = area_a + area_b - inter
-    return inter / union if union > 0 else 0.0
 
 
 class SimpleTracker:
@@ -75,7 +69,7 @@ class SimpleTracker:
             for tid, track in self._tracks.items():
                 if tid in matched_track_ids:
                     continue
-                score = _iou(track.bbox, det)
+                score = calculate_iou(track.bbox, det)
                 if score > best_iou:
                     best_iou = score
                     best_tid = tid
