@@ -23,7 +23,7 @@ def draw_text_pil(
     """
     Vẽ chữ tiếng Việt và bounding box lên frame bằng PIL.
     """
-    # Vẽ bbox bằng OpenCV cho nhanh
+    # Vẽ bbox bằng OpenCV
     for t in tracks_info:
         x1, y1, x2, y2, _ = t["bbox"]
         color = color_known if t["recognized"] else color_unknown

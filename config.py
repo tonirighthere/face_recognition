@@ -5,7 +5,7 @@ config.py — Cấu hình toàn hệ thống Face Recognition Desktop App
 import os
 from pathlib import Path
 
-# ─── Đường dẫn gốc ──────────────────────────────────────────────────────────
+# Đường dẫn gốc   
 BASE_DIR = Path(__file__).parent.resolve()
 STORAGE_DIR = BASE_DIR / "storage" / "photos"
 MODEL_DIR   = BASE_DIR / "weights"
@@ -17,7 +17,7 @@ MODEL_DIR.mkdir(parents=True, exist_ok=True)
 DB_PATH.parent.mkdir(parents=True, exist_ok=True)
 
 # Camera
-CAMERA_INDEX   = 0          # Webcam mặc định
+CAMERA_INDEX   = "rtsp://root:Atin%40123@192.168.82.134/axis-media/media.amp"          # Webcam mặc định
 CAMERA_WIDTH   = 640        # 640x480 = 30 FPS trên hầu hết webcam USB
 CAMERA_HEIGHT  = 480
 
@@ -26,12 +26,11 @@ QUEUE_MAXSIZE  = 3          # Kích thước tối đa của các hàng đợi (
 DISPLAY_FPS    = 30         # Tốc độ làm mới giao diện (QTimer pull)
 
 #  Face Detection (YOLOv8-face)
-
 YOLO_MODEL_NAME    = "yolov8n-face.pt"   # nano model — nhanh, nhẹ
 YOLO_CONF_THRESH   = 0.50
 YOLO_IOU_THRESH    = 0.45
 YOLO_IMG_SIZE      = 640
-YOLO_DEVICE        = "cuda"              # "cuda" nếu có GPU
+YOLO_DEVICE        = "cuda"
 
 #  Face Embedding (InsightFace ArcFace) 
 INSIGHTFACE_MODEL  = "buffalo_sc"        # buffalo_sc=nhỏ/nhanh, buffalo_l=chính xác hơn

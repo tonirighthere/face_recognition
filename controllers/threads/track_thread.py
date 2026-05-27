@@ -26,13 +26,13 @@ class TrackThread(QThread):
                 time.sleep(0.05)
                 continue
 
-            # --- Lấy từ DetectThread ---
+            # Lấy từ DetectThread
             try:
                 frame, detections, is_ai_frame = self.in_queue.get(timeout=0.1)
             except queue.Empty:
                 continue
 
-            # --- Cập nhật tracker ---
+            # Cập nhật tracker
             if is_ai_frame and detections is not None:
                 try:
                     tracks = self.tracker.update(detections)
@@ -40,11 +40,13 @@ class TrackThread(QThread):
                 except Exception:
                     logger.error("[TrackThread] tracker.update() failed:")
                     traceback.print_exc()
-                    tracks = last_tracks
+                    current_time = time.time()
+                    tracks = [t for t in last_tracks if current_time - t.last_update_time < 1.0]
             else:
-                tracks = last_tracks
+                current_time = time.time()
+                tracks = [t for t in last_tracks if current_time - t.last_update_time < 1.0]
 
-            # --- Đẩy xuống FaceThread ---
+            # Đẩy xuống FaceThread
             if self.out_queue.full():
                 try:
                     self.out_queue.get_nowait()

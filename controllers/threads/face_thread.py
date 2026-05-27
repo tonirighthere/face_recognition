@@ -35,13 +35,13 @@ class FaceThread(QThread):
                 time.sleep(0.05)
                 continue
 
-            # --- Lấy từ TrackThread ---
+            # Lấy từ TrackThread
             try:
                 frame, tracks, is_ai_frame = self.in_queue.get(timeout=0.1)
             except queue.Empty:
                 continue
 
-            # --- Nhận diện khuôn mặt ---
+            # Nhận diện khuôn mặt
             if is_ai_frame:
                 tracks_info_copy = []
                 try:
@@ -95,7 +95,7 @@ class FaceThread(QThread):
                     logger.error("[FaceThread] recognition failed:")
                     traceback.print_exc()
 
-            # --- Update Shared State ---
+            # Update Shared State
             with self.shared_state["lock"]:
                 self.shared_state["tracks_info"] = tracks_info_copy
 

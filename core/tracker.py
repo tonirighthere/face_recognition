@@ -1,5 +1,5 @@
 """
-core/tracker.py — Simple IoU-based face tracker (không cần thư viện ngoài)
+core/tracker.py — Simple IoU-based face tracker
 Giữ track_id ổn định qua các frame để tránh re-embed liên tục.
 """
 
@@ -15,8 +15,6 @@ from utils.math_utils import calculate_iou, BBox
 
 logger = logging.getLogger(__name__)
 
-
-
 class Track:
     _next_id = 1
 
@@ -26,6 +24,8 @@ class Track:
         self.bbox = bbox
         self.lost = 0
         self.hits = 1
+        import time
+        self.last_update_time = time.time()
         # Cache nhận diện để không re-search mỗi frame
         self.person_id:   Optional[int]   = None
         self.person_name: Optional[str]   = None
@@ -44,6 +44,8 @@ class Track:
         self.bbox = bbox
         self.lost = 0
         self.hits += 1
+        import time
+        self.last_update_time = time.time()
 
 
 class SimpleTracker:
