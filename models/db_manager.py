@@ -28,7 +28,7 @@ class DatabaseManager:
         self._init_db()
         self._initialized = True
 
-    # ── Private ──────────────────────────────────────────────────────────────
+    #  Private    
 
     def _get_conn(self) -> sqlite3.Connection:
         conn = sqlite3.connect(self._db_path)

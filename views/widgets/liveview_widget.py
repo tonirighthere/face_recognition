@@ -1,4 +1,3 @@
-import time
 from PyQt5.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QFrame, QSizePolicy
 )
@@ -6,7 +5,7 @@ from PyQt5.QtCore import Qt, pyqtSlot, QTimer
 from PyQt5.QtGui import QImage, QPixmap, QFont
 
 from config import *
-from controllers.ai_worker import AIWorker
+from controllers.main_controller import MainController
 from models.db_manager import DatabaseManager
 from utils.qt_utils import cv_to_qpixmap, load_scaled_pixmap
 
@@ -14,16 +13,15 @@ class LiveViewWidget(QWidget):
     def __init__(self):
         super().__init__()
         self.db = DatabaseManager()
-        self.worker = AIWorker()
+        self.worker = MainController()
 
-        # Kết nối trực tiếp vào stream_thread để Qt tự dùng QueuedConnection giao frame
-        # lên main thread mà không bị drop
+        # Kết nối trực tiếp vào stream_thread để Qt tự dùng QueuedConnection giao frame lên main thread mà không bị drop
         self.worker.stream_thread.recognition_result.connect(self.update_info)
         self.worker.error_occurred.connect(self.show_error)
         self.worker.status_changed.connect(lambda msg: print(f"[Worker] {msg}"))
         self.is_playing = False
 
-        # QTimer để pull frame từ shared_state (giải quyết signal flooding)
+        # QTimer để pull frame từ shared_state (giải quyết signal flooding) giới hạn FPS và tránh tràn frame (buffer overflow)
         self._display_timer = QTimer(self)
         self._display_timer.setInterval(1000 // DISPLAY_FPS)
         self._display_timer.timeout.connect(self._pull_frame)
@@ -41,7 +39,7 @@ class LiveViewWidget(QWidget):
         main_layout.setContentsMargins(0, 0, 0, 0)
         main_layout.setSpacing(20)
         
-        # ─── BÊN TRÁI: KHUNG CAMERA ───────────────────────────────────────────
+        # BÊN TRÁI: KHUNG CAMERA
         left_panel = QFrame()
         left_panel.setStyleSheet(f"""
             QFrame {{
@@ -88,7 +86,7 @@ class LiveViewWidget(QWidget):
         
         main_layout.addWidget(left_panel, 7) # Chiếm 7 phần
         
-        # ─── BÊN PHẢI: THÔNG TIN NGƯỜI NHẬN DIỆN ──────────────────────────────
+        # BÊN PHẢI: THÔNG TIN NGƯỜI NHẬN DIỆN
         right_panel = QFrame()
         right_panel.setStyleSheet(f"""
             QFrame {{
@@ -224,7 +222,7 @@ class LiveViewWidget(QWidget):
                 
                 # Cập nhật Avatar nếu có
                 if db_person.get('anh_path'):
-                    pix = load_scaled_pixmap(db_person['anh_path'], 150, 150, keep_aspect=False)
+                    pix = load_scaled_pixmap(db_person['anh_path'], 150, 150, keep_aspect=True)
                     if not pix.isNull():
                         self.lbl_avatar.setPixmap(pix)
                 else:

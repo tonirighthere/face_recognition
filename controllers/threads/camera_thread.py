@@ -11,7 +11,7 @@ from config import CAMERA_INDEX, CAMERA_WIDTH, CAMERA_HEIGHT
 
 logger = logging.getLogger(__name__)
 
-
+# Đọc frame từ camera và phân phối cho 2 pipeline
 class CameraThread(QThread):
     error_occurred = pyqtSignal(str)
 
@@ -56,14 +56,14 @@ class CameraThread(QThread):
                 cam_count = 0
                 cam_t0 = now
 
-            # --- Push to StreamQueue (Display - 30 FPS) ---
+            # Push to StreamQueue
             if self.stream_queue.full():
                 try: self.stream_queue.get_nowait()
                 except queue.Empty: pass
             try: self.stream_queue.put_nowait(frame)
             except queue.Full: pass
 
-            # --- Push to AI Queue (AI Pipeline) ---
+            # Push to AI Queue
             if self.ai_queue.full():
                 try: self.ai_queue.get_nowait()
                 except queue.Empty: pass

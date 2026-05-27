@@ -1,5 +1,5 @@
 """
-controllers/ai_worker.py — Quản lý 5-thread asynchronous AI pipeline
+controllers/main_controller.py — Quản lý 5-thread asynchronous AI pipeline
 """
 
 import logging
@@ -21,11 +21,11 @@ logger = logging.getLogger(__name__)
 
 import threading
 
-class AIWorker(QThread):
+class MainController(QThread):
     """
     Manager điều phối toàn bộ pipeline theo mô hình Decoupled:
-    - Nhánh 1 (Display): Camera -> StreamThread -> UI (30 FPS)
-    - Nhánh 2 (AI): Camera -> Detect -> Track -> Face -> Cập nhật Shared State (chậm hơn nhưng không làm drop frame Display)
+    - Nhánh 1 (Display): Camera -> StreamThread -> UI
+    - Nhánh 2 (AI): Camera -> Detect -> Track -> Face -> Cập nhật Shared State
     """
     status_changed = pyqtSignal(str)
     error_occurred = pyqtSignal(str)
@@ -44,9 +44,9 @@ class AIWorker(QThread):
 
         # Shared state giữa AI pipeline và Display pipeline
         self.shared_state = {
-            "tracks_info":    [],
-            "display_frame":  None,
-            "lock":           threading.Lock()
+            "tracks_info": [],
+            "display_frame": None,
+            "lock": threading.Lock()
         }
 
         # Tạo stream_thread sớm
@@ -132,4 +132,4 @@ class AIWorker(QThread):
 
         self._tracker.reset()
         self.status_changed.emit("Camera đã dừng.")
-        logger.info("AIWorker stopped cleanly.")
+        logger.info("MainController stopped cleanly.")

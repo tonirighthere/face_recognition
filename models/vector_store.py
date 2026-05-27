@@ -38,7 +38,7 @@ class VectorStore:
         self._matrix: Optional[np.ndarray] = None   # shape (N, 512)
         self._n = 0
 
-    # ── Load / Reload ─────────────────────────────────────────────────────────
+    #  Load / Reload    
 
     def load_from_db(self, db_manager) -> int:
         """
@@ -73,7 +73,7 @@ class VectorStore:
         logger.info(f"VectorStore: {self._n} embeddings loaded.")
         return self._n
 
-    # ── Search ────────────────────────────────────────────────────────────────
+    #  Search    
 
     def search(
         self,
@@ -117,7 +117,7 @@ class VectorStore:
         results = self.search(query_vec, top_k=1, threshold=threshold)
         return results[0] if results else None
 
-    # ── Thêm nhanh không reload ────────────────────────────────────────────────
+    #  Thêm nhanh không reload 
 
     def add(self, person_id: int, ho_ten: str, vec: np.ndarray):
         """Thêm 1 embedding vào cache mà không cần reload từ DB."""

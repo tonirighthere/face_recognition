@@ -56,7 +56,7 @@ class FaceEngine:
     def is_loaded(self) -> bool:
         return self._loaded
 
-    # ── YOLOv8-face ──────────────────────────────────────────────────────────
+    #  YOLOv8-face    
 
     def _load_yolo(self):
         try:
@@ -94,7 +94,7 @@ class FaceEngine:
                 boxes.append((int(x1), int(y1), int(x2), int(y2), conf))
         return boxes
 
-    # ── InsightFace ──────────────────────────────────────────────────────────
+    #  InsightFace    
 
     def _load_insightface(self):
         try:

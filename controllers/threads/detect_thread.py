@@ -7,7 +7,6 @@ from PyQt5.QtCore import QThread
 import sys
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
-from config import FRAME_SKIP
 
 logger = logging.getLogger(__name__)
 
@@ -31,7 +30,7 @@ class DetectThread(QThread):
                 time.sleep(0.05)
                 continue
 
-            # --- Lấy frame từ AI Queue ---
+            # Lấy frame từ AI Queue
             try:
                 frame = self.in_queue.get(timeout=0.1)
             except queue.Empty:
@@ -44,7 +43,7 @@ class DetectThread(QThread):
                 logger.error(f"DetectThread YOLO Error: {e}")
                 detections = []
 
-            # --- Chuyển sang TrackThread ---
+            # Chuyển sang TrackThread
             if self.out_queue.full():
                 try: self.out_queue.get_nowait()
                 except queue.Empty: pass

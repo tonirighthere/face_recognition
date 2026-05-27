@@ -59,7 +59,7 @@ class SimpleTracker:
     def update(self, detections: List[BBox]) -> List[Track]:
         """
         Cập nhật tracker với list bboxes phát hiện mới.
-        Trả về list Track còn sống (kể cả đang lost ngắn hạn).
+        Trả về list Track (kể cả đang lost ngắn hạn).
         """
         matched_track_ids = set()
 

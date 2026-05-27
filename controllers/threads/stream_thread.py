@@ -4,7 +4,6 @@ import logging
 import traceback
 import cv2
 import numpy as np
-from PIL import Image, ImageDraw, ImageFont
 from PyQt5.QtCore import QThread, pyqtSignal
 
 import sys

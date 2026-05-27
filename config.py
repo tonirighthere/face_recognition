@@ -20,7 +20,6 @@ DB_PATH.parent.mkdir(parents=True, exist_ok=True)
 CAMERA_INDEX   = 0          # Webcam mặc định
 CAMERA_WIDTH   = 640        # 640x480 = 30 FPS trên hầu hết webcam USB
 CAMERA_HEIGHT  = 480
-FRAME_SKIP     = 3          # Chỉ chạy AI mỗi N frame
 
 #  Pipeline & Hiển thị 
 QUEUE_MAXSIZE  = 3          # Kích thước tối đa của các hàng đợi (đảm bảo Real-time)
@@ -43,8 +42,6 @@ SIMILARITY_THRESHOLD = 0.38             # Ngưỡng nhận diện (cosine simila
 TOP_K                = 1               # Số kết quả trả về
 
 #  ByteTrack 
-TRACK_HIGH_THRESH  = 0.6
-TRACK_LOW_THRESH   = 0.1
 TRACK_MAX_LOST     = 30               # Frame tối đa giữ track khi mất
 
 #  UI 

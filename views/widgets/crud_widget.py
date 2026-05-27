@@ -97,7 +97,7 @@ class CrudWidget(QWidget):
         left_layout.addWidget(self.table)
         main_layout.addWidget(left_panel, 7) # Chiếm 7 phần
         
-        # ─── BÊN PHẢI: FORM THÊM / SỬA ────────────────────────────────────────
+        # BÊN PHẢI: FORM THÊM / SỬA
         self.right_panel = QFrame()
         self.right_panel.setStyleSheet(f"""
             QFrame {{
@@ -223,7 +223,7 @@ class CrudWidget(QWidget):
                 return
                 
             self.current_img_path = file_path
-            pix = QPixmap(file_path)
+            pix = load_scaled_pixmap(file_path, 110, 110, keep_aspect=True)
             self.btn_avatar.setIcon(QIcon(pix))
             self.btn_avatar.setIconSize(QSize(110, 110))
             self.btn_avatar.setText("")
@@ -253,7 +253,7 @@ class CrudWidget(QWidget):
         
         if person.get('anh_path') and os.path.exists(person['anh_path']):
             self.current_img_path = person['anh_path']
-            pix = QPixmap(person['anh_path'])
+            pix = load_scaled_pixmap(person['anh_path'], 110, 110, keep_aspect=True)
             self.btn_avatar.setIcon(QIcon(pix))
             self.btn_avatar.setIconSize(QSize(110, 110))
             self.btn_avatar.setText("")
@@ -355,7 +355,7 @@ class CrudWidget(QWidget):
             # Ảnh
             lbl_img = QLabel()
             if p.get('anh_path') and os.path.exists(p['anh_path']):
-                pix = load_scaled_pixmap(p['anh_path'], 50, 50, keep_aspect=False)
+                pix = load_scaled_pixmap(p['anh_path'], 50, 50, keep_aspect=True)
                 lbl_img.setPixmap(pix)
             else:
                 lbl_img.setText("No Image")
