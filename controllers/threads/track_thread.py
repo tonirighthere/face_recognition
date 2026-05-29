@@ -4,6 +4,11 @@ import logging
 import traceback
 from PyQt5.QtCore import QThread
 
+import sys
+from pathlib import Path
+sys.path.insert(0, str(Path(__file__).parent.parent.parent))
+from config import QUEUE_TIMEOUT, THREAD_SLEEP, TRACK_RETAIN_SECONDS
+
 logger = logging.getLogger(__name__)
 
 
@@ -23,12 +28,12 @@ class TrackThread(QThread):
 
         while self.running:
             if self.paused:
-                time.sleep(0.05)
+                time.sleep(THREAD_SLEEP)
                 continue
 
             # Lấy từ DetectThread
             try:
-                frame, detections, is_ai_frame = self.in_queue.get(timeout=0.1)
+                frame, detections, is_ai_frame = self.in_queue.get(timeout=QUEUE_TIMEOUT)
             except queue.Empty:
                 continue
 
@@ -41,10 +46,10 @@ class TrackThread(QThread):
                     logger.error("[TrackThread] tracker.update() failed:")
                     traceback.print_exc()
                     current_time = time.time()
-                    tracks = [t for t in last_tracks if current_time - t.last_update_time < 1.0]
+                    tracks = [t for t in last_tracks if current_time - t.last_update_time < TRACK_RETAIN_SECONDS]
             else:
                 current_time = time.time()
-                tracks = [t for t in last_tracks if current_time - t.last_update_time < 1.0]
+                tracks = [t for t in last_tracks if current_time - t.last_update_time < TRACK_RETAIN_SECONDS]
 
             # Đẩy xuống FaceThread
             if self.out_queue.full():

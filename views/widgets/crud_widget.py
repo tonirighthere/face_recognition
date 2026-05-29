@@ -34,7 +34,8 @@ class CrudWidget(QWidget):
         
         # BÊN TRÁI: DANH SÁCH & TÌM KIẾM
         left_panel = QFrame()
-        left_panel.setStyleSheet(f"background-color: {COLOR_BG_CARD}; border-radius: 10px; border: 1px solid {COLOR_BORDER};")
+        left_panel.setObjectName("leftPanel")
+        left_panel.setStyleSheet(f"#leftPanel {{ background-color: {COLOR_BG_CARD}; border-radius: 10px; border: 1px solid {COLOR_BORDER}; }}")
         left_layout = QVBoxLayout(left_panel)
         left_layout.setContentsMargins(20, 20, 20, 20)
         
@@ -90,8 +91,16 @@ class CrudWidget(QWidget):
                 padding: 5px;
             }}
             QTableWidget::item {{
-                padding: 5px;
+                padding: 0px;
                 border-bottom: 1px solid #f1f5f9;
+                color: {COLOR_TEXT};
+            }}
+            QTableWidget::item:selected {{
+                background-color: #f0f9ff;
+                color: {COLOR_TEXT};
+            }}
+            QTableWidget::item:focus {{
+                outline: none;
             }}
         """)
         left_layout.addWidget(self.table)
@@ -352,15 +361,25 @@ class CrudWidget(QWidget):
         
         self.table.setRowCount(len(persons))
         for row, p in enumerate(persons):
-            # Ảnh
+            # Ảnh avatar vuông
             lbl_img = QLabel()
+            lbl_img.setFixedSize(64, 64)
             if p.get('anh_path') and os.path.exists(p['anh_path']):
-                pix = load_scaled_pixmap(p['anh_path'], 50, 50, keep_aspect=True)
+                pix = load_scaled_pixmap(p['anh_path'], 64, 64, keep_aspect=True)
                 lbl_img.setPixmap(pix)
+                lbl_img.setStyleSheet(f"border: 1px solid {COLOR_BORDER}; border-radius: 6px;")
             else:
-                lbl_img.setText("No Image")
+                lbl_img.setText("Trống")
+                lbl_img.setStyleSheet(f"border: 1px dashed {COLOR_BORDER}; border-radius: 4px; color: {COLOR_TEXT_MUTED}; font-size: 11px;")
             lbl_img.setAlignment(Qt.AlignCenter)
-            self.table.setCellWidget(row, 0, lbl_img)
+            
+            # Bọc trong widget để căn giữa
+            img_container = QWidget()
+            img_layout = QHBoxLayout(img_container)
+            img_layout.setContentsMargins(0, 0, 0, 0)
+            img_layout.setAlignment(Qt.AlignCenter)
+            img_layout.addWidget(lbl_img)
+            self.table.setCellWidget(row, 0, img_container)
             
             # Text
             self.table.setItem(row, 1, QTableWidgetItem(p['ho_ten']))
@@ -391,4 +410,4 @@ class CrudWidget(QWidget):
             action_layout.addWidget(btn_delete)
             self.table.setCellWidget(row, 4, action_widget)
             
-            self.table.setRowHeight(row, 50)
+            self.table.setRowHeight(row, 72)

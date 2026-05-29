@@ -1,21 +1,30 @@
 """
-Face Detection (YOLOv8-face) + Embedding (InsightFace ArcFace)
+Face Detection (MediaPipe) + Quality Filter + Embedding (InsightFace ArcFace)
+
+Pipeline:
+  MediaPipe detect → Quality filter (blur / roll / yaw / pitch) → InsightFace embed
+
+Các khuôn mặt không đủ chất lượng bị loại TRƯỚC khi vào InsightFace,
+giúp giảm tải đáng kể khi chỉ sử dụng CPU.
 """
 
 import logging
+import math
 from pathlib import Path
 from typing import List, Optional, Tuple
 
 import cv2
 import numpy as np
+import mediapipe as mp   # import một lần duy nhất khi khởi động module
 
 import sys
 sys.path.insert(0, str(Path(__file__).parent.parent))
 from config import (
     MODEL_DIR,
-    YOLO_MODEL_NAME, YOLO_CONF_THRESH, YOLO_IOU_THRESH, YOLO_IMG_SIZE, YOLO_DEVICE,
+    MP_MIN_DETECTION_CONFIDENCE,
     INSIGHTFACE_MODEL, INSIGHTFACE_DEVICE,
 )
+from utils.face_utils import is_face_valid
 
 logger = logging.getLogger(__name__)
 
@@ -25,7 +34,7 @@ BBox = Tuple[int, int, int, int, float]
 
 class FaceEngine:
     """
-    Kết hợp YOLOv8-face (detect) và InsightFace ArcFace (embed).
+    Kết hợp MediaPipe (detect + quality filter) và InsightFace ArcFace (embed).
     Sử dụng như singleton qua FaceEngine.instance().
     """
 
@@ -38,73 +47,116 @@ class FaceEngine:
         return cls._instance
 
     def __init__(self):
-        self._yolo = None
-        self._app  = None   # InsightFace FaceAnalysis
-        self._loaded = False
+        self._mp_detector  = None   # mediapipe FaceDetection
+        self._app          = None   # InsightFace FaceAnalysis
+        self._loaded       = False
 
     def load(self):
-        """Tải model"""
+        """Tải cả hai model."""
         if self._loaded:
             return
-        # Bắt buộc load InsightFace (onnxruntime) TRƯỚC YOLO (torch) để tránh lỗi DLL Conflict trên Windows
+        # Load InsightFace (onnxruntime) TRƯỚC để tránh xung đột DLL trên Windows
         self._load_insightface()
-        self._load_yolo()
+        self._load_mediapipe()
         self._loaded = True
-        logger.info("FaceEngine loaded successfully.")
+        logger.info("FaceEngine loaded successfully (MediaPipe + InsightFace).")
 
     @property
     def is_loaded(self) -> bool:
         return self._loaded
 
-    #  YOLOv8-face    
+    # ─── MediaPipe Detection ───────────────────────────────────────────────────
 
-    def _load_yolo(self):
+    def _load_mediapipe(self):
         try:
-            from ultralytics import YOLO
-            model_path = MODEL_DIR / YOLO_MODEL_NAME
-            self._yolo = YOLO(str(model_path) if model_path.exists() else YOLO_MODEL_NAME)
-            logger.info(f"YOLOv8-face loaded: {YOLO_MODEL_NAME}")
+            from mediapipe.tasks.python import BaseOptions
+            from mediapipe.tasks.python.vision import FaceDetector, FaceDetectorOptions
+
+            model_path = MODEL_DIR / "blaze_face_short_range.tflite"
+            if not model_path.exists():
+                raise FileNotFoundError(
+                    f"MediaPipe model not found at {model_path}. "
+                    "Chạy lệnh sau để tải về:\n"
+                    "  python -c \"import urllib.request; "
+                    "urllib.request.urlretrieve('https://storage.googleapis.com/mediapipe-models/"
+                    "face_detector/blaze_face_short_range/float16/1/blaze_face_short_range.tflite', "
+                    "'weights/blaze_face_short_range.tflite')\""
+                )
+
+            options = FaceDetectorOptions(
+                base_options=BaseOptions(model_asset_path=str(model_path)),
+                min_detection_confidence=MP_MIN_DETECTION_CONFIDENCE,
+            )
+            self._mp_detector = FaceDetector.create_from_options(options)
+            logger.info(
+                f"MediaPipe FaceDetector (Tasks API) loaded: {model_path.name}, "
+                f"conf>={MP_MIN_DETECTION_CONFIDENCE}"
+            )
         except Exception as e:
-            logger.error(f"Cannot load YOLOv8-face: {e}")
+            logger.error(f"Cannot load MediaPipe: {e}")
             raise
+
 
     def detect(self, frame: np.ndarray) -> List[BBox]:
         """
-        Detect khuôn mặt trong frame.
-        Trả về list (x1, y1, x2, y2, conf).
+        Detect khuôn mặt trong frame bằng MediaPipe Tasks API.
+        Mỗi khuôn mặt được qua bộ lọc chất lượng (blur / roll / yaw / pitch).
+        Trả về list (x1, y1, x2, y2, conf) — chỉ các khuôn mặt ĐẠT chuẩn.
         """
-        if self._yolo is None:
+        if self._mp_detector is None:
             return []
-        results = self._yolo.predict(
-            frame,
-            conf=YOLO_CONF_THRESH,
-            iou=YOLO_IOU_THRESH,
-            imgsz=YOLO_IMG_SIZE,
-            device=YOLO_DEVICE,
-            verbose=False,
-        )
+
+        h, w = frame.shape[:2]
+
+        # Tasks API dùng mediapipe.Image (RGB)
+        rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+        mp_image = mp.Image(image_format=mp.ImageFormat.SRGB, data=rgb)
+        result = self._mp_detector.detect(mp_image)
+
+        if not result.detections:
+            return []
+
         boxes: List[BBox] = []
-        for r in results:
-            if r.boxes is None:
+        for detection in result.detections:
+            score = detection.categories[0].score
+            bb    = detection.bounding_box
+
+            x1 = max(0, bb.origin_x)
+            y1 = max(0, bb.origin_y)
+            x2 = min(w, bb.origin_x + bb.width)
+            y2 = min(h, bb.origin_y + bb.height)
+
+            if x2 <= x1 or y2 <= y1:
                 continue
-            for box in r.boxes:
-                x1, y1, x2, y2 = box.xyxy[0].tolist()
-                conf = float(box.conf[0])
-                boxes.append((int(x1), int(y1), int(x2), int(y2), conf))
+
+            # Keypoints pixel: [right_eye, left_eye, nose_tip, mouth_center, right_ear, left_ear]
+            kp_px = [
+                (int(k.x * w), int(k.y * h))
+                for k in detection.keypoints
+            ]
+
+            if not is_face_valid(frame, (x1, y1, x2, y2, score), kp_px):
+                logger.debug(
+                    f"Face filtered out at ({x1},{y1},{x2},{y2}) score={score:.2f}"
+                )
+                continue
+
+            boxes.append((x1, y1, x2, y2, float(score)))
+
         return boxes
 
-    #  InsightFace    
+    # InsightFace Embedding
 
     def _load_insightface(self):
         try:
-            import insightface
             from insightface.app import FaceAnalysis
             self._app = FaceAnalysis(
                 name=INSIGHTFACE_MODEL,
                 root=str(MODEL_DIR),
-                providers=["CPUExecutionProvider"] if INSIGHTFACE_DEVICE < 0 else ["CUDAExecutionProvider"],
+                providers=["CPUExecutionProvider"] if INSIGHTFACE_DEVICE < 0
+                          else ["CUDAExecutionProvider"],
             )
-            self._app.prepare(ctx_id=INSIGHTFACE_DEVICE, det_size=(640, 640))
+            self._app.prepare(ctx_id=INSIGHTFACE_DEVICE, det_size=(320, 320))
             logger.info(f"InsightFace loaded: {INSIGHTFACE_MODEL}")
         except Exception as e:
             logger.error(f"Cannot load InsightFace: {e}")
@@ -119,47 +171,50 @@ class FaceEngine:
             return None
         x1, y1, x2, y2, _ = bbox
         h, w = frame.shape[:2]
-        
-        # Mở rộng bbox (padding) khoảng 30% để InsightFace dễ detect ra 5 landmarks
+
+        # Mở rộng bbox (padding ~30%) để InsightFace dễ detect 5 landmarks
         bw, bh = x2 - x1, y2 - y1
         pad_x, pad_y = int(bw * 0.3), int(bh * 0.3)
-        
+
         px1 = max(0, x1 - pad_x)
         py1 = max(0, y1 - pad_y)
         px2 = min(w, x2 + pad_x)
         py2 = min(h, y2 + pad_y)
-        
+
         face_crop = frame[py1:py2, px1:px2]
         if face_crop.size == 0:
             return None
-            
-        # InsightFace nhận ảnh BGR, gọi app.get() trên vùng crop: Detect => Align => Embed
+
+        # InsightFace: Detect → Align → Embed trên vùng crop
         faces = self._app.get(face_crop)
         if not faces:
             return None
-            
-        # Nếu có nhiều khuôn mặt trong vùng crop, lấy khuôn mặt to nhất (gần tâm nhất)
-        faces = sorted(faces, key=lambda f: (f.bbox[2]-f.bbox[0])*(f.bbox[3]-f.bbox[1]), reverse=True)
-        
+
+        # Lấy khuôn mặt lớn nhất (thường là khuôn mặt chính)
+        faces = sorted(
+            faces,
+            key=lambda f: (f.bbox[2] - f.bbox[0]) * (f.bbox[3] - f.bbox[1]),
+            reverse=True,
+        )
+
         emb = faces[0].normed_embedding   # đã normalize L2
         return emb.astype(np.float32)
 
-    # Các hàm hỗ trợ cho Quản lý dữ liệu (CRUD)
+    # ─── CRUD helpers ──────────────────────────────────────────────────────────
+
     def get_embedding_from_image(self, image: np.ndarray) -> Optional[np.ndarray]:
         """
-        Embed từ ảnh full (không cần bbox) — dùng khi thêm người vào DB.
-        Trả về None nếu không phát hiện đúng 1 khuôn mặt.
+        Embed từ ảnh tĩnh — dùng khi đăng ký (CRUD) khuôn mặt mới vào DB.
+        Sử dụng MediaPipe để detect (đảm bảo tính nhất quán với realtime) → InsightFace embed.
+        Trả về None nếu không phát hiện đúng 1 khuôn mặt đạt chuẩn.
         """
-        if self._app is None:
+        bboxes = self.detect(image)
+        if len(bboxes) != 1:
             return None
-        faces = self._app.get(image)
-        if len(faces) != 1:
-            return None
-        return faces[0].normed_embedding.astype(np.float32)
+        return self.get_embedding(image, bboxes[0])
 
     def count_faces(self, image: np.ndarray) -> int:
-        """Đếm số khuôn mặt trong ảnh (dùng khi validate CRUD)."""
-        if self._app is None:
-            return 0
-        faces = self._app.get(image)
-        return len(faces)
+        """
+        Đếm số khuôn mặt đạt chuẩn trong ảnh (dùng khi validate thêm ảnh CRUD).
+        """
+        return len(self.detect(image))

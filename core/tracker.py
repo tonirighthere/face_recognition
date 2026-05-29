@@ -10,7 +10,7 @@ import sys
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 from config import TRACK_MAX_LOST
-from utils.math_utils import calculate_iou, BBox
+from utils.tracking_utils import calculate_iou, BBox
 import time
 
 logger = logging.getLogger(__name__)

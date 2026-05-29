@@ -7,7 +7,7 @@ from PyQt5.QtCore import QThread, pyqtSignal
 import sys
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
-from config import CAMERA_INDEX, CAMERA_WIDTH, CAMERA_HEIGHT
+from config import CAMERA_INDEX, CAMERA_WIDTH, CAMERA_HEIGHT, CAMERA_FPS, THREAD_SLEEP
 
 logger = logging.getLogger(__name__)
 
@@ -41,7 +41,7 @@ class CameraThread(QThread):
             cap.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc(*'MJPG'))
             cap.set(cv2.CAP_PROP_FRAME_WIDTH, CAMERA_WIDTH)
             cap.set(cv2.CAP_PROP_FRAME_HEIGHT, CAMERA_HEIGHT)
-            cap.set(cv2.CAP_PROP_FPS, 30)
+            cap.set(cv2.CAP_PROP_FPS, CAMERA_FPS)
             
         # BUFFERSIZE = 1 rất quan trọng cho IP Camera để không bị delay (tích tụ frame cũ)
         cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
@@ -52,7 +52,7 @@ class CameraThread(QThread):
             ret, frame = cap.read()
             if not ret:
                 logger.warning("Không đọc được frame, thử lại…")
-                time.sleep(0.05)
+                time.sleep(THREAD_SLEEP)
                 continue
 
             # Push to StreamQueue

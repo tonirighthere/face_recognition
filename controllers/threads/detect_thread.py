@@ -7,6 +7,7 @@ from PyQt5.QtCore import QThread
 import sys
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
+from config import QUEUE_TIMEOUT, THREAD_SLEEP
 
 logger = logging.getLogger(__name__)
 
@@ -27,12 +28,12 @@ class DetectThread(QThread):
 
         while self.running:
             if self.paused:
-                time.sleep(0.05)
+                time.sleep(THREAD_SLEEP)
                 continue
 
             # Lấy frame từ AI Queue
             try:
-                frame = self.in_queue.get(timeout=0.1)
+                frame = self.in_queue.get(timeout=QUEUE_TIMEOUT)
             except queue.Empty:
                 continue
 
@@ -40,7 +41,7 @@ class DetectThread(QThread):
             try:
                 detections = self.engine.detect(frame)
             except Exception as e:
-                logger.error(f"DetectThread YOLO Error: {e}")
+                logger.error(f"DetectThread MediaPipe Error: {e}")
                 detections = []
 
             # Chuyển sang TrackThread

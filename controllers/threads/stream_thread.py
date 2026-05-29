@@ -9,13 +9,16 @@ from PyQt5.QtCore import QThread, pyqtSignal
 import sys
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
-from config import DISPLAY_FPS
+from config import (
+    QUEUE_TIMEOUT, 
+    UI_RESULT_EMIT_RATE, 
+    FPS_CALC_INTERVAL,
+    BBOX_COLOR_KNOWN,
+    BBOX_COLOR_UNKNOWN
+)
 from utils.image_utils import get_pil_font, draw_text_pil
 
 logger = logging.getLogger(__name__)
-
-COLOR_KNOWN   = (0, 230, 100)   # Xanh lá 
-COLOR_UNKNOWN = (80, 80, 255)   # Đỏ
 
 
 class StreamThread(QThread):
@@ -41,7 +44,7 @@ class StreamThread(QThread):
         while self.running:
             # Lấy Frame Gốc (Real-time từ Camera)
             try:
-                frame = self.stream_queue.get(timeout=0.1)
+                frame = self.stream_queue.get(timeout=QUEUE_TIMEOUT)
             except queue.Empty:
                 continue
 
@@ -51,7 +54,7 @@ class StreamThread(QThread):
 
             # Cập nhật GUI List tối đa 2 lần/giây (tránh spam signal)
             now = time.time()
-            if now - last_result_emit >= 0.5:
+            if now - last_result_emit >= UI_RESULT_EMIT_RATE:
                 results = [t for t in tracks_info if t["recognized"]]
                 self.recognition_result.emit(results)
                 last_result_emit = now
@@ -59,14 +62,14 @@ class StreamThread(QThread):
             # Tính FPS Display
             fps_count += 1
             now = time.time()
-            if now - fps_t0 >= 1.0:
+            if now - fps_t0 >= FPS_CALC_INTERVAL:
                 fps = fps_count / (now - fps_t0)
                 fps_count = 0
                 fps_t0 = now
 
             # Vẽ vào shared_state (QTimer sẽ pull)
             try:
-                draw_frame = draw_text_pil(frame, tracks_info, fps, self._font, self._font_fps, COLOR_KNOWN, COLOR_UNKNOWN)
+                draw_frame = draw_text_pil(frame, tracks_info, fps, self._font, self._font_fps, BBOX_COLOR_KNOWN, BBOX_COLOR_UNKNOWN)
                 with self.shared_state["lock"]:
                     self.shared_state["display_frame"] = draw_frame
             except Exception:

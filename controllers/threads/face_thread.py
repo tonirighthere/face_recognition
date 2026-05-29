@@ -8,12 +8,18 @@ from PyQt5.QtCore import QThread
 import sys
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
-from config import SIMILARITY_THRESHOLD
+from config import (
+    SIMILARITY_THRESHOLD, 
+    TRACK_COOLDOWN, 
+    TRACK_DELTA_CONF,
+    TRACK_AREA_RATIO,
+    TRACK_EMA_ALPHA,
+    QUEUE_TIMEOUT,
+    THREAD_SLEEP
+)
+from utils.tracking_utils import should_re_embed, update_embedding_ema
 
 logger = logging.getLogger(__name__)
-
-COOLDOWN   = 1.0
-DELTA_CONF = 0.1
 
 
 class FaceThread(QThread):
@@ -32,12 +38,12 @@ class FaceThread(QThread):
 
         while self.running:
             if self.paused:
-                time.sleep(0.05)
+                time.sleep(THREAD_SLEEP)
                 continue
 
             # Lấy từ TrackThread
             try:
-                frame, tracks, is_ai_frame = self.in_queue.get(timeout=0.1)
+                frame, tracks, is_ai_frame = self.in_queue.get(timeout=QUEUE_TIMEOUT)
             except queue.Empty:
                 continue
 
@@ -53,12 +59,14 @@ class FaceThread(QThread):
                         current_area = (x2 - x1) * (y2 - y1)
                         now_time = time.time()
 
-                        needs_re_embed = (
-                            not track.recognized
-                            or (
-                                (current_area > track.best_area * 1.2 or conf > track.best_conf + DELTA_CONF)
-                                and (now_time - track.last_embed_time > COOLDOWN)
-                            )
+                        needs_re_embed = should_re_embed(
+                            track, 
+                            current_area, 
+                            conf, 
+                            now_time, 
+                            TRACK_COOLDOWN, 
+                            TRACK_DELTA_CONF,
+                            TRACK_AREA_RATIO
                         )
 
                         if needs_re_embed:
@@ -70,8 +78,7 @@ class FaceThread(QThread):
                                     new_sim = hit[2]
                                     if not track.recognized or (new_sim > track.similarity and new_sim > SIMILARITY_THRESHOLD):
                                         if track.recognized and track.embedding is not None and track.person_id == hit[0]:
-                                            track.embedding = 0.8 * track.embedding + 0.2 * new_embedding
-                                            track.embedding /= np.linalg.norm(track.embedding)
+                                            track.embedding = update_embedding_ema(track.embedding, new_embedding, alpha=TRACK_EMA_ALPHA)
                                         else:
                                             track.embedding = new_embedding
                                         track.person_id   = hit[0]
