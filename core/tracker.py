@@ -1,5 +1,4 @@
 """
-core/tracker.py — Simple IoU-based face tracker
 Giữ track_id ổn định qua các frame để tránh re-embed liên tục.
 """
 
@@ -12,6 +11,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 from config import TRACK_MAX_LOST
 from utils.math_utils import calculate_iou, BBox
+import time
 
 logger = logging.getLogger(__name__)
 
@@ -24,7 +24,6 @@ class Track:
         self.bbox = bbox
         self.lost = 0
         self.hits = 1
-        import time
         self.last_update_time = time.time()
         # Cache nhận diện để không re-search mỗi frame
         self.person_id:   Optional[int]   = None
@@ -44,13 +43,12 @@ class Track:
         self.bbox = bbox
         self.lost = 0
         self.hits += 1
-        import time
         self.last_update_time = time.time()
 
 
 class SimpleTracker:
     """
-    Hungarian-free IoU tracker — đủ dùng cho liveview khuôn mặt tốc độ cao.
+    Bộ não điều phối, được gọi ở mỗi khung hình để ghép nối các khuôn mặt cũ và mới.
     """
 
     def __init__(self, iou_threshold: float = 0.35, max_lost: int = TRACK_MAX_LOST):

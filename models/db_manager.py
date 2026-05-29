@@ -1,5 +1,5 @@
 """
-database/db_manager.py — SQLite CRUD operations cho bảng nhan_su
+SQLite CRUD operations cho bảng nhan_su
 """
 
 import sqlite3

@@ -23,25 +23,30 @@ class CameraThread(QThread):
 
     def run(self):
         self.running = True
-        cap = cv2.VideoCapture(CAMERA_INDEX, cv2.CAP_DSHOW)
-        if not cap.isOpened():
+        if isinstance(CAMERA_INDEX, int):
+            # Webcam USB local
+            cap = cv2.VideoCapture(CAMERA_INDEX, cv2.CAP_DSHOW)
+            if not cap.isOpened():
+                cap = cv2.VideoCapture(CAMERA_INDEX)
+        else:
+            # IP Camera (RTSP/HTTP Stream)
             cap = cv2.VideoCapture(CAMERA_INDEX)
+
         if not cap.isOpened():
             self.error_occurred.emit(f"Không mở được camera (index={CAMERA_INDEX})")
             return
 
-        cap.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc(*'MJPG'))
-        cap.set(cv2.CAP_PROP_FRAME_WIDTH, CAMERA_WIDTH)
-        cap.set(cv2.CAP_PROP_FRAME_HEIGHT, CAMERA_HEIGHT)
-        cap.set(cv2.CAP_PROP_FPS, 30)
+        # Ép thông số cho webcam
+        if isinstance(CAMERA_INDEX, int):
+            cap.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc(*'MJPG'))
+            cap.set(cv2.CAP_PROP_FRAME_WIDTH, CAMERA_WIDTH)
+            cap.set(cv2.CAP_PROP_FRAME_HEIGHT, CAMERA_HEIGHT)
+            cap.set(cv2.CAP_PROP_FPS, 30)
+            
+        # BUFFERSIZE = 1 rất quan trọng cho IP Camera để không bị delay (tích tụ frame cũ)
         cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
         
-        real_fps = cap.get(cv2.CAP_PROP_FPS)
-        logger.info(f"Camera opened: {int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))}x{int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))} @ {real_fps}FPS")
-
-        # Đo FPS thực tế từ camera
-        cam_t0    = time.time()
-        cam_count = 0
+        logger.info(f"Camera opened: {int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))}x{int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))}")
 
         while self.running:
             ret, frame = cap.read()
@@ -49,12 +54,6 @@ class CameraThread(QThread):
                 logger.warning("Không đọc được frame, thử lại…")
                 time.sleep(0.05)
                 continue
-
-            cam_count += 1
-            now = time.time()
-            if now - cam_t0 >= 2.0:
-                cam_count = 0
-                cam_t0 = now
 
             # Push to StreamQueue
             if self.stream_queue.full():

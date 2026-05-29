@@ -1,5 +1,5 @@
 """
-core/face_engine.py — Face Detection (YOLOv8-face) + Embedding (InsightFace ArcFace)
+Face Detection (YOLOv8-face) + Embedding (InsightFace ArcFace)
 """
 
 import logging
@@ -43,7 +43,7 @@ class FaceEngine:
         self._loaded = False
 
     def load(self):
-        """Tải model (gọi 1 lần, có thể chạy trong thread riêng)."""
+        """Tải model"""
         if self._loaded:
             return
         # Bắt buộc load InsightFace (onnxruntime) TRƯỚC YOLO (torch) để tránh lỗi DLL Conflict trên Windows
@@ -62,7 +62,6 @@ class FaceEngine:
         try:
             from ultralytics import YOLO
             model_path = MODEL_DIR / YOLO_MODEL_NAME
-            # Nếu chưa có → YOLO tự download về ~/.ultralytics
             self._yolo = YOLO(str(model_path) if model_path.exists() else YOLO_MODEL_NAME)
             logger.info(f"YOLOv8-face loaded: {YOLO_MODEL_NAME}")
         except Exception as e:
@@ -134,7 +133,7 @@ class FaceEngine:
         if face_crop.size == 0:
             return None
             
-        # InsightFace nhận ảnh BGR, gọi app.get() trên vùng crop
+        # InsightFace nhận ảnh BGR, gọi app.get() trên vùng crop: Detect => Align => Embed
         faces = self._app.get(face_crop)
         if not faces:
             return None
@@ -145,6 +144,7 @@ class FaceEngine:
         emb = faces[0].normed_embedding   # đã normalize L2
         return emb.astype(np.float32)
 
+    # Các hàm hỗ trợ cho Quản lý dữ liệu (CRUD)
     def get_embedding_from_image(self, image: np.ndarray) -> Optional[np.ndarray]:
         """
         Embed từ ảnh full (không cần bbox) — dùng khi thêm người vào DB.

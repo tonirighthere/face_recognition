@@ -1,5 +1,5 @@
 """
-core/vector_store.py — RAM cache embeddings + cosine similarity search (NumPy)
+RAM cache embeddings + cosine similarity search (NumPy)
 """
 
 import logging
@@ -118,7 +118,6 @@ class VectorStore:
         return results[0] if results else None
 
     #  Thêm nhanh không reload 
-
     def add(self, person_id: int, ho_ten: str, vec: np.ndarray):
         """Thêm 1 embedding vào cache mà không cần reload từ DB."""
         v = vec.astype(np.float32)

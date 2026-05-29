@@ -4,7 +4,7 @@ BBox = Tuple[int, int, int, int, float]
 
 def calculate_iou(a: BBox, b: BBox) -> float:
     """
-    Tính Intersection over Union (IoU) giữa 2 bounding boxes.
+    Tính IoU giữa 2 bounding boxes.
     BBox format: (x1, y1, x2, y2, conf)
     """
     ax1, ay1, ax2, ay2, _ = a
