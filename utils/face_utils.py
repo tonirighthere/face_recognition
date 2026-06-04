@@ -35,7 +35,7 @@ def is_face_valid(
     """
     x1, y1, x2, y2, _ = bbox
 
-    # --- 1. Blur check --------------------------------------------------
+    # 1. Blur check
     face_crop = frame[y1:y2, x1:x2]
     if face_crop.size == 0:
         return False
@@ -59,7 +59,7 @@ def is_face_valid(
     if eye_dist < 1e-5:
         return True   # Tránh chia 0
 
-    # --- 2. Roll check --------------------------------------------------
+    # 2. Roll check
     # θ = arctan((yr - yl) / (xr - xl))
     # right_eye.x > left_eye.x khi mặt thẳng → delta_x > 0 → roll ≈ 0°
     delta_x = right_eye[0] - left_eye[0]
@@ -69,7 +69,7 @@ def is_face_valid(
         logger.debug(f"Roll reject: {roll_deg:.1f}° > ±{FILTER_ROLL_THRESHOLD}°")
         return False
 
-    # --- 3. Yaw check ---------------------------------------------------
+    # 3. Yaw check 
     # r = dist(nose, left_eye) / dist(nose, right_eye)
     dist_nose_left  = float(np.linalg.norm(nose_tip - left_eye))
     dist_nose_right = float(np.linalg.norm(nose_tip - right_eye))

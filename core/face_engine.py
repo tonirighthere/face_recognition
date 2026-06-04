@@ -97,11 +97,11 @@ class FaceEngine:
             raise
 
 
-    def detect(self, frame: np.ndarray) -> List[BBox]:
+    def detect(self, frame: np.ndarray, apply_filter: bool = True) -> List[BBox]:
         """
         Detect khuôn mặt trong frame bằng MediaPipe Tasks API.
-        Mỗi khuôn mặt được qua bộ lọc chất lượng (blur / roll / yaw / pitch).
-        Trả về list (x1, y1, x2, y2, conf) — chỉ các khuôn mặt ĐẠT chuẩn.
+        Nếu apply_filter=True, mỗi khuôn mặt được qua bộ lọc chất lượng (blur / roll / yaw / pitch).
+        Trả về list (x1, y1, x2, y2, conf).
         """
         if self._mp_detector is None:
             return []
@@ -135,7 +135,7 @@ class FaceEngine:
                 for k in detection.keypoints
             ]
 
-            if not is_face_valid(frame, (x1, y1, x2, y2, score), kp_px):
+            if apply_filter and not is_face_valid(frame, (x1, y1, x2, y2, score), kp_px):
                 logger.debug(
                     f"Face filtered out at ({x1},{y1},{x2},{y2}) score={score:.2f}"
                 )
@@ -205,16 +205,16 @@ class FaceEngine:
     def get_embedding_from_image(self, image: np.ndarray) -> Optional[np.ndarray]:
         """
         Embed từ ảnh tĩnh — dùng khi đăng ký (CRUD) khuôn mặt mới vào DB.
-        Sử dụng MediaPipe để detect (đảm bảo tính nhất quán với realtime) → InsightFace embed.
-        Trả về None nếu không phát hiện đúng 1 khuôn mặt đạt chuẩn.
+        Sử dụng MediaPipe để detect (bỏ qua filter để chấp nhận ảnh selfie/chỉnh sửa) → InsightFace embed.
+        Trả về None nếu không phát hiện đúng 1 khuôn mặt.
         """
-        bboxes = self.detect(image)
+        bboxes = self.detect(image, apply_filter=False)
         if len(bboxes) != 1:
             return None
         return self.get_embedding(image, bboxes[0])
 
     def count_faces(self, image: np.ndarray) -> int:
         """
-        Đếm số khuôn mặt đạt chuẩn trong ảnh (dùng khi validate thêm ảnh CRUD).
+        Đếm số khuôn mặt trong ảnh tĩnh (bỏ qua filter).
         """
-        return len(self.detect(image))
+        return len(self.detect(image, apply_filter=False))

@@ -5,43 +5,51 @@ Dự án Hệ thống Nhận diện Khuôn mặt (Face Recognition Desktop App) 
 ## 🎯 Tính năng chính
 - **Nhận diện khuôn mặt realtime** từ luồng webcam (Liveview).
 - **Quản lý thông tin người dùng** (Thêm, Sửa, Xóa, Tìm kiếm danh sách nhân sự).
-- **Hiệu năng cao** với thiết kế xử lý đa luồng, loại bỏ hoàn toàn tình trạng giật lag giao diện (non-blocking UI).
+- **Hiệu năng cao** với thiết kế xử lý đa luồng Pipeline (Multi-Stage Pipeline), loại bỏ hoàn toàn tình trạng giật lag giao diện (non-blocking UI) ngay cả khi chạy thuần CPU.
 
 ## 🏗️ Kiến trúc hệ thống
-Hệ thống được thiết kế theo mô hình đa luồng (Multi-threading) tách biệt giữa giao diện và xử lý AI:
+Hệ thống được thiết kế theo mô hình đa luồng (Multi-threading) chia thành một Pipeline tuần tự giúp phân tải xử lý:
 - **UI (PyQt5)**: Luồng chính (Main Thread) tập trung hiển thị giao diện và nhận sự kiện từ người dùng.
-- **AI Worker (QThread)**: Luồng phụ liên tục đọc frame từ webcam bằng `cv2.VideoCapture()`, xử lý khung hình qua các mô hình AI và đo FPS.
-- **Giao tiếp Signals/Slots**: Đẩy kết quả khung hình (đã vẽ bounding box) an toàn từ luồng AI lên luồng giao diện mà không gây crash.
-- **Database & Cache**: Sử dụng SQLite lưu trữ thông tin/đặc trưng, kết hợp đọc dữ liệu thành RAM Cache dưới dạng ma trận NumPy khi khởi động để tối ưu tốc độ so khớp.
+- **Pipeline AI Workers (QThread)**: Hệ thống gồm các luồng phụ chạy nối tiếp nhau qua các Queue (Hàng đợi):
+  - *Camera Thread*: Liên tục đọc frame từ webcam.
+  - *Detect Thread*: Phát hiện khuôn mặt bằng MediaPipe.
+  - *Track Thread*: Theo dõi đối tượng (Tracking) và cấp ID.
+  - *Face Thread*: Trích xuất đặc trưng và nhận diện.
+  - *Stream Thread*: Tổng hợp kết quả và đẩy lên giao diện.
+- **Giao tiếp Signals/Slots**: Đẩy kết quả khung hình và dữ liệu an toàn từ luồng Pipeline lên luồng giao diện mà không gây crash.
+- **Database & Cache**: Sử dụng SQLite lưu trữ thông tin, kết hợp đọc vector đặc trưng thành RAM Cache dưới dạng ma trận NumPy để tối ưu tốc độ so khớp.
 
 ## 🔴 Pipeline AI & Computer Vision
-Pipeline xử lý AI được tối ưu theo quy trình tuần tự 4 bước:
-1. **Phát hiện khuôn mặt (YOLOv8-face)**: Dùng mô hình `yolov8n-face.pt` nhỏ nhẹ, chạy trên GPU (CUDA) để phát hiện cả những khuôn mặt nhỏ và ở xa.
-2. **Theo dõi đối tượng (Custom IoU Tracker)**: Thuật toán dựa trên IoU do chính dự án tự xây dựng để cấp ID tạm thời cho mỗi khuôn mặt, giúp bỏ qua việc nhận diện lại ở các khung hình liên tiếp và tiết kiệm tài nguyên.
-3. **Trích xuất đặc trưng (InsightFace - MobileFaceNet)**: Xoay thẳng mặt và xuất embedding vector (512 chiều). Đặc biệt, hệ thống dùng kỹ thuật *Crop Padding* (pad 30%) và điều hướng chạy trên CPU để tránh lỗi sụp đổ bộ nhớ VRAM.
-4. **So khớp Vector (Cosine Similarity)**: Tính toán khoảng cách vector qua NumPy, nếu độ tương đồng lớn hơn ngưỡng cài đặt (ví dụ: `0.38`), xác định thành công người quen.
+Pipeline xử lý AI được tối ưu cho tốc độ và độ chính xác:
+1. **Phát hiện khuôn mặt (MediaPipe Tasks API)**: Sử dụng mô hình `BlazeFace` siêu nhẹ, chạy mượt mà trên CPU mà không cần GPU rời.
+2. **Bộ lọc chất lượng (Face Quality Filter)**: Đánh giá độ mờ (Blur) và góc nghiêng của khuôn mặt (Yaw, Pitch, Roll) để loại bỏ các khung hình xấu trước khi đưa vào nhận diện.
+3. **Theo dõi đối tượng (Custom IoU Tracker)**: Thuật toán dựa trên IoU do chính dự án tự xây dựng để cấp ID tạm thời cho mỗi khuôn mặt, giúp tiết kiệm tài nguyên bằng cách không cần nhận diện lại liên tục ở mọi khung hình.
+4. **Trích xuất đặc trưng (InsightFace - MobileFaceNet)**: Xoay thẳng mặt và xuất embedding vector (512 chiều) bằng model `buffalo_sc`.
+5. **So khớp Vector (Cosine Similarity)**: Tính toán khoảng cách vector qua NumPy, nếu độ tương đồng lớn hơn ngưỡng cài đặt, hệ thống xác định thành công danh tính người dùng.
 
 ## 🧠 Công nghệ sử dụng (Tech Stack)
 - **Frontend / GUI**: PyQt5
 - **Computer Vision**: OpenCV
-- **Face Detection**: YOLOv8-face
-- **Face Tracking**: Custom IoU Tracker (Thuật toán tự xây dựng)
+- **Face Detection**: MediaPipe (BlazeFace)
+- **Face Tracking**: Custom IoU Tracker
 - **Face Recognition**: InsightFace (`buffalo_sc`)
-- **Toán học & Ma trận**: NumPy / FAISS
+- **Toán học & Ma trận**: NumPy
 - **Database**: SQLite
 
 ## 🧩 Cấu trúc thư mục dự án
 
 ```text
 face_recognition/
-├── controllers/    # Controller điều khiển luồng nghiệp vụ
-├── core/           # Xử lý lõi AI (YOLO, Tracker, InsightFace)
-├── database/       # Logic tương tác SQLite
-├── models/         # Khai báo các đối tượng/thực thể
+├── controllers/    # Điều khiển nghiệp vụ
+│   ├── threads/    # Các luồng AI Pipeline (Camera, Detect, Track, Face, Stream)
+│   └── main_controller.py
+├── core/           # Xử lý lõi AI (FaceEngine, Tracker)
+├── database/       # Chứa file SQLite và script khởi tạo (.sql)
+├── models/         # Khai báo các đối tượng thao tác Database & Vector
 ├── storage/        # Lưu trữ hình ảnh người dùng (ảnh crop/ảnh upload)
-├── utils/          # Các hàm hỗ trợ dùng chung
+├── utils/          # Các hàm hỗ trợ dùng chung (image_utils, qt_utils...)
 ├── views/          # Mã nguồn giao diện UI/UX
-├── weights/        # Chứa file mô hình AI đã huấn luyện
+├── weights/        # Chứa file mô hình AI đã huấn luyện (BlazeFace, InsightFace)
 ├── config.py       # File cấu hình tham số chung toàn hệ thống
 ├── main.py         # File khởi chạy ứng dụng
 └── requirements.txt
@@ -59,17 +67,15 @@ face_recognition/
    ```bash
    pip install -r requirements.txt
    ```
-   *Lưu ý: Thư viện `torch` sẽ tự động được tải kèm `ultralytics`. Tuy nhiên, để chạy YOLOv8 bằng GPU, bạn cần tải đúng phiên bản PyTorch CUDA từ [pytorch.org](https://pytorch.org).*
 
 3. **Chạy ứng dụng:**
    ```bash
    python main.py
    ```
 
-
 ## ✅ Lộ trình (Roadmap)
-- [x] **Phase 1:** Phát hiện khuôn mặt & Trích xuất Embedding.
-- [x] **Phase 2:** So khớp Cosine Similarity.
+- [x] **Phase 1:** Phát hiện khuôn mặt bằng MediaPipe & Trích xuất Embedding InsightFace.
+- [x] **Phase 2:** So khớp Cosine Similarity qua **Vector Cache**.
 - [x] **Phase 3:** Xây dựng quản lý DB với SQLite (CRUD).
 - [x] **Phase 4:** Giao diện Desktop hoàn chỉnh với PyQt5.
-- [x] **Phase 5:** Tối ưu hóa đa luồng, theo dõi đối tượng (Custom IoU Tracker), tối ưu RAM Cache.
+- [x] **Phase 5:** Xây dựng kiến trúc Multi-Stage Pipeline (Các Thread nối tiếp), Custom IoU Tracker, và Face Quality Filter.
