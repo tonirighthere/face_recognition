@@ -1,0 +1,30 @@
+version: "3.9"
+
+services:
+  face_recognition_web:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: face_recognition_gradio
+    restart: unless-stopped
+
+    environment:
+      - PYTHONUNBUFFERED=1
+
+    volumes:
+      # Persistent data: database SQLite
+      - ./database:/app/database
+      # Persistent data: ảnh nhân sự
+      - ./storage:/app/storage
+      # Persistent data: model weights
+      - ./weights:/app/weights
+
+    ports:
+      # Gradio Web port — dùng trình duyệt để xem demo
+      - "7860:7860"
+
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
