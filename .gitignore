@@ -9,15 +9,15 @@ venv/
 env/
 ENV/
 
-# Models & Weights
-models/models/
-*.pt
+# InsightFace model cache (auto-downloaded at runtime)
+weights/models/
+weights/buffalo_sc/
 *.onnx
+*.pt
 
-# Database & Storage
+# Database & Storage (persistent — do not commit)
 database/*.db
-storage/
-database/images/
+storage/photos/
 
 # IDE & OS
 .idea/
@@ -25,3 +25,7 @@ database/images/
 *.swp
 .DS_Store
 Thumbs.db
+
+# Logs
+*.log
+logs/

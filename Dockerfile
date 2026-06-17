@@ -1,64 +1,50 @@
 # ============================================================
-# Base image: Python 3.10 slim trên Debian Bullseye
+# Face Recognition System — Docker Image
+# FastAPI + InsightFace + MediaPipe  (CPU-only)
 # ============================================================
 FROM python:3.10-slim-bullseye
 
 LABEL maintainer="atin@company.com"
-LABEL description="Face Recognition System - InsightFace + MediaPipe + Gradio Web UI"
+LABEL description="Face Recognition API — FastAPI + InsightFace + MediaPipe"
 
-# ============================================================
-# 1. Cài các thư viện hệ thống cần thiết (chủ yếu cho OpenCV)
-# ============================================================
+# ── System dependencies ──────────────────────────────────────
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    # Build tools
-    build-essential \
-    cmake \
-    # OpenCV dependencies
-    libglib2.0-0 \
-    libsm6 \
-    libxext6 \
-    libxrender-dev \
-    libgl1 \
-    libgomp1 \
-    # Utilities
-    curl \
-    git \
+        # OpenCV headless runtime
+        libglib2.0-0 \
+        libsm6 \
+        libxext6 \
+        libxrender1 \
+        libgl1 \
+        libgomp1 \
+        # Build tools (needed by some pip packages)
+        build-essential \
+        cmake \
+        # Utilities
+        curl \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
-# ============================================================
-# 2. Thiết lập thư mục làm việc
-# ============================================================
+# ── Working directory ────────────────────────────────────────
 WORKDIR /app
 
-# ============================================================
-# 3. Cài Python dependencies
-# ============================================================
+# ── Python dependencies (layer cache) ───────────────────────
 COPY requirements.txt .
-
-# Nâng pip và cài thư viện
-RUN pip install --upgrade pip && \
-    pip install --no-cache-dir onnxruntime>=1.16.0 && \
+RUN pip install --upgrade pip --no-cache-dir && \
     pip install --no-cache-dir -r requirements.txt
 
-# ============================================================
-# 4. Copy mã nguồn dự án
-# ============================================================
+# ── Application source ───────────────────────────────────────
 COPY . .
 
-# ============================================================
-# 5. Tạo các thư mục dữ liệu
-# ============================================================
+# ── Persistent data directories ─────────────────────────────
 RUN mkdir -p storage/photos database weights
 
-# ============================================================
-# 6. Biến môi trường
-# ============================================================
+# ── Environment ──────────────────────────────────────────────
 ENV PYTHONUNBUFFERED=1
 ENV PYTHONDONTWRITEBYTECODE=1
+ENV API_PORT=8000
 
-# Expose cổng Gradio (7860)
-EXPOSE 7860
+# ── Port ─────────────────────────────────────────────────────
+EXPOSE 8000
 
-# Khởi chạy ứng dụng Gradio
-CMD ["python", "app_gradio.py"]
+# ── Startup ──────────────────────────────────────────────────
+CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "1"]

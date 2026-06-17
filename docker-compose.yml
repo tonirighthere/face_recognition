@@ -1,27 +1,36 @@
 version: "3.9"
 
 services:
-  face_recognition_web:
+  face_recognition:
     build:
       context: .
       dockerfile: Dockerfile
-    container_name: face_recognition_gradio
+    image: face_recognition:latest
+    container_name: face_recognition_api
     restart: unless-stopped
 
     environment:
       - PYTHONUNBUFFERED=1
+      - API_PORT=8000
 
     volumes:
-      # Persistent data: database SQLite
+      # Persistent data: SQLite database
       - ./database:/app/database
-      # Persistent data: ảnh nhân sự
+      # Persistent data: face photos
       - ./storage:/app/storage
-      # Persistent data: model weights
+      # Persistent data: AI model weights
       - ./weights:/app/weights
 
     ports:
-      # Gradio Web port — dùng trình duyệt để xem demo
-      - "7860:7860"
+      # FastAPI Web UI + REST API + WebSocket
+      - "8000:8000"
+
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
 
     logging:
       driver: "json-file"

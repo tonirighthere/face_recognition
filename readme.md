@@ -1,81 +1,168 @@
-# 🚀 Face Recognition Desktop App
+# 🚀 Face Recognition System — API + Docker + Web UI
 
-Dự án Hệ thống Nhận diện Khuôn mặt (Face Recognition Desktop App) là một tổ hợp chặt chẽ giữa Lập trình Giao diện (GUI), Trí tuệ Nhân tạo (Computer Vision / AI), và Quản trị Cơ sở dữ liệu (Database). Hệ thống hỗ trợ nhận diện khuôn mặt realtime từ camera và quản lý thông tin nhân sự.
+Hệ thống nhận diện khuôn mặt realtime sử dụng **MediaPipe** (face detection) + **InsightFace ArcFace** (face embedding), đóng gói Docker, cung cấp **REST API** + **WebSocket stream**, kèm **Web UI** tích hợp sẵn.
 
-## 🎯 Tính năng chính
-- **Nhận diện khuôn mặt realtime** từ luồng webcam (Liveview).
-- **Quản lý thông tin người dùng** (Thêm, Sửa, Xóa, Tìm kiếm danh sách nhân sự).
-- **Hiệu năng cao** với thiết kế xử lý đa luồng Pipeline (Multi-Stage Pipeline), loại bỏ hoàn toàn tình trạng giật lag giao diện (non-blocking UI) ngay cả khi chạy thuần CPU.
+---
 
-## 🏗️ Kiến trúc hệ thống
-Hệ thống được thiết kế theo mô hình đa luồng (Multi-threading) chia thành một Pipeline tuần tự giúp phân tải xử lý:
-- **UI (PyQt5)**: Luồng chính (Main Thread) tập trung hiển thị giao diện và nhận sự kiện từ người dùng.
-- **Pipeline AI Workers (QThread)**: Hệ thống gồm các luồng phụ chạy nối tiếp nhau qua các Queue (Hàng đợi):
-  - *Camera Thread*: Liên tục đọc frame từ webcam.
-  - *Detect Thread*: Phát hiện khuôn mặt bằng MediaPipe.
-  - *Track Thread*: Theo dõi đối tượng (Tracking) và cấp ID.
-  - *Face Thread*: Trích xuất đặc trưng và nhận diện.
-  - *Stream Thread*: Tổng hợp kết quả và đẩy lên giao diện.
-- **Giao tiếp Signals/Slots**: Đẩy kết quả khung hình và dữ liệu an toàn từ luồng Pipeline lên luồng giao diện mà không gây crash.
-- **Database & Cache**: Sử dụng SQLite lưu trữ thông tin, kết hợp đọc vector đặc trưng thành RAM Cache dưới dạng ma trận NumPy để tối ưu tốc độ so khớp.
+## 📐 Kiến trúc
 
-## 🔴 Pipeline AI & Computer Vision
-Pipeline xử lý AI được tối ưu cho tốc độ và độ chính xác:
-1. **Phát hiện khuôn mặt (MediaPipe Tasks API)**: Sử dụng mô hình `BlazeFace` siêu nhẹ, chạy mượt mà trên CPU mà không cần GPU rời.
-2. **Bộ lọc chất lượng (Face Quality Filter)**: Đánh giá độ mờ (Blur) và góc nghiêng của khuôn mặt (Yaw, Pitch, Roll) để loại bỏ các khung hình xấu trước khi đưa vào nhận diện.
-3. **Theo dõi đối tượng (Custom IoU Tracker)**: Thuật toán dựa trên IoU do chính dự án tự xây dựng để cấp ID tạm thời cho mỗi khuôn mặt, giúp tiết kiệm tài nguyên bằng cách không cần nhận diện lại liên tục ở mọi khung hình.
-4. **Trích xuất đặc trưng (InsightFace - MobileFaceNet)**: Xoay thẳng mặt và xuất embedding vector (512 chiều) bằng model `buffalo_sc`.
-5. **So khớp Vector (Cosine Similarity)**: Tính toán khoảng cách vector qua NumPy, nếu độ tương đồng lớn hơn ngưỡng cài đặt, hệ thống xác định thành công danh tính người dùng.
-
-## 🧠 Công nghệ sử dụng (Tech Stack)
-- **Frontend / GUI**: PyQt5
-- **Computer Vision**: OpenCV
-- **Face Detection**: MediaPipe (BlazeFace)
-- **Face Tracking**: Custom IoU Tracker
-- **Face Recognition**: InsightFace (`buffalo_sc`)
-- **Toán học & Ma trận**: NumPy
-- **Database**: SQLite
-
-## 🧩 Cấu trúc thư mục dự án
-
-```text
+```
 face_recognition/
-├── controllers/    # Điều khiển nghiệp vụ
-│   ├── threads/    # Các luồng AI Pipeline (Camera, Detect, Track, Face, Stream)
-│   └── main_controller.py
-├── core/           # Xử lý lõi AI (FaceEngine, Tracker)
-├── database/       # Chứa file SQLite và script khởi tạo (.sql)
-├── models/         # Khai báo các đối tượng thao tác Database & Vector
-├── storage/        # Lưu trữ hình ảnh người dùng (ảnh crop/ảnh upload)
-├── utils/          # Các hàm hỗ trợ dùng chung (image_utils, qt_utils...)
-├── views/          # Mã nguồn giao diện UI/UX
-├── weights/        # Chứa file mô hình AI đã huấn luyện (BlazeFace, InsightFace)
-├── config.py       # File cấu hình tham số chung toàn hệ thống
-├── main.py         # File khởi chạy ứng dụng
-└── requirements.txt
+├── main.py                    # FastAPI app entry point
+├── config.py                  # Cấu hình toàn cục
+├── requirements.txt
+├── Dockerfile
+├── docker-compose.yml
+│
+├── api/                       # FastAPI layer
+│   ├── dependencies.py        # Singleton: DB, FaceEngine, VectorStore
+│   └── routers/
+│       ├── persons.py         # CRUD nhân sự (POST/GET/DELETE)
+│       └── recognize.py       # Nhận diện ảnh + WebSocket stream
+│
+├── core/                      # AI Engine
+│   ├── face_engine.py         # MediaPipe detect + InsightFace embed
+│   └── tracker.py             # Face tracker (IoU-based)
+│
+├── models/                    # Data layer
+│   ├── db_manager.py          # SQLite CRUD
+│   └── vector_store.py        # RAM cosine similarity search
+│
+├── utils/
+│   ├── face_utils.py          # Bộ lọc chất lượng (blur/roll/yaw/pitch)
+│   └── tracking_utils.py     # IoU, EMA helpers
+│
+├── database/
+│   └── schema.sql
+│
+├── storage/photos/            # Ảnh chân dung nhân sự
+├── weights/                   # Model weights (auto-download)
+│
+└── static/                    # Web UI (HTML/CSS/JS)
+    ├── index.html
+    ├── style.css
+    └── app.js
 ```
 
-## ⚙️ Hướng dẫn cài đặt & Chạy dự án
+---
 
-1. **Cài đặt môi trường ảo (Khuyến nghị):**
-   ```bash
-   python -m venv venv
-   venv\Scripts\activate
-   ```
+## ⚡ Chạy nhanh (Development)
 
-2. **Cài đặt thư viện phụ thuộc:**
-   ```bash
-   pip install -r requirements.txt
-   ```
+### 1. Cài dependencies
+```bash
+pip install -r requirements.txt
+```
 
-3. **Chạy ứng dụng:**
-   ```bash
-   python main.py
-   ```
+### 2. Tải model weights (lần đầu)
+```bash
+python -c "
+import urllib.request
+urllib.request.urlretrieve(
+  'https://storage.googleapis.com/mediapipe-models/face_detector/blaze_face_short_range/float16/1/blaze_face_short_range.tflite',
+  'weights/blaze_face_short_range.tflite'
+)
+print('MediaPipe model downloaded.')
+"
+```
+> InsightFace (`buffalo_sc`) tự động tải xuống khi khởi động lần đầu.
 
-## ✅ Lộ trình (Roadmap)
-- [x] **Phase 1:** Phát hiện khuôn mặt bằng MediaPipe & Trích xuất Embedding InsightFace.
-- [x] **Phase 2:** So khớp Cosine Similarity qua **Vector Cache**.
-- [x] **Phase 3:** Xây dựng quản lý DB với SQLite (CRUD).
-- [x] **Phase 4:** Giao diện Desktop hoàn chỉnh với PyQt5.
-- [x] **Phase 5:** Xây dựng kiến trúc Multi-Stage Pipeline (Các Thread nối tiếp), Custom IoU Tracker, và Face Quality Filter.
+### 3. Chạy server
+```bash
+uvicorn main:app --host 0.0.0.0 --port 8000 --reload
+```
+
+### 4. Truy cập
+| URL | Mô tả |
+|-----|-------|
+| `http://localhost:8000` | Web UI demo |
+| `http://localhost:8000/docs` | Swagger API docs |
+| `http://localhost:8000/redoc` | ReDoc API docs |
+| `http://localhost:8000/health` | Health check |
+
+---
+
+## 🐳 Chạy bằng Docker
+
+### Build & start
+```bash
+docker compose up -d --build
+```
+
+### Xem logs
+```bash
+docker compose logs -f
+```
+
+### Dừng
+```bash
+docker compose down
+```
+
+### Dữ liệu persistent
+Dữ liệu được mount qua volumes — **không mất khi restart container**:
+- `./database/` → SQLite
+- `./storage/photos/` → Ảnh nhân sự
+- `./weights/` → Model weights
+
+---
+
+## 🌐 REST API Reference
+
+### Nhân sự (Persons)
+| Method | Endpoint | Mô tả |
+|--------|----------|-------|
+| `POST` | `/api/persons/` | Đăng ký nhân sự (multipart: thông tin + ảnh) |
+| `GET` | `/api/persons/` | Danh sách tất cả |
+| `GET` | `/api/persons/search?q=...` | Tìm kiếm |
+| `GET` | `/api/persons/{id}` | Chi tiết |
+| `GET` | `/api/persons/{id}/photo` | Ảnh chân dung |
+| `DELETE` | `/api/persons/{id}` | Xóa |
+
+### Nhận diện (Recognize)
+| Method | Endpoint | Mô tả |
+|--------|----------|-------|
+| `POST` | `/api/recognize/image` | Nhận diện từ ảnh tĩnh (multipart) |
+| `WS` | `/api/recognize/stream` | WebSocket realtime stream |
+
+#### WebSocket Protocol
+```json
+// Client → Server
+{ "frame": "<base64 JPEG>", "threshold": 0.4, "apply_filter": false }
+
+// Server → Client
+{ "image_base64": "...", "detections": [...], "fps": 12.5 }
+```
+
+---
+
+## 🖥️ Deploy lên Server
+
+```bash
+# 1. Copy code lên server
+rsync -avz --exclude='venv/' --exclude='weights/' \
+  /path/to/face_recognition/ atin@192.168.82.65:/home/atin/face_recognition/
+
+# 2. SSH vào server
+ssh atin@192.168.82.65
+cd /home/atin/face_recognition
+
+# 3. Tải model weights (nếu chưa có)
+mkdir -p weights
+curl -L "https://storage.googleapis.com/mediapipe-models/face_detector/blaze_face_short_range/float16/1/blaze_face_short_range.tflite" \
+     -o weights/blaze_face_short_range.tflite
+
+# 4. Build & start Docker
+docker compose up -d --build
+
+# 5. Kiểm tra
+curl http://localhost:8000/health
+```
+
+---
+
+## ⚙️ Cấu hình
+
+Chỉnh sửa `config.py` để thay đổi:
+- `SIMILARITY_THRESHOLD` — ngưỡng cosine similarity (mặc định `0.4`)
+- `INSIGHTFACE_DEVICE` — `-1` = CPU, `0` = GPU CUDA
+- `FILTER_*` — các ngưỡng bộ lọc chất lượng khuôn mặt

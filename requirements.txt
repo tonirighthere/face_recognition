@@ -1,11 +1,15 @@
-PyQt5>=5.15.9
-opencv-python>=4.8.0
-mediapipe>=0.10.0            # Thay thế YOLOv8 để detect mặt thuần CPU
-insightface>=0.7.3
-onnxruntime>=1.16.0          # Hoặc onnxruntime-gpu nếu muốn chạy InsightFace trên GPU
+# ── Core AI ──────────────────────────────────────────────────────────────────
+opencv-python-headless>=4.8.0   # headless: không cần GUI (server/Docker)
+mediapipe>=0.10.0               # Face Detection (CPU-only, no YOLO needed)
+insightface>=0.7.3              # ArcFace face embedding
+onnxruntime>=1.16.0             # ONNX runtime cho InsightFace (CPU)
 numpy>=1.24.0
-gradio>=4.0.0
 
-# Lưu ý:
-# - ultralytics (YOLOv8) đã được thay thế bằng mediapipe để tối ưu hiệu năng trên CPU.
-#   Nếu vẫn cần YOLOv8 cho mục đích khác, cài thêm: ultralytics>=8.0.0
+# ── API Framework ─────────────────────────────────────────────────────────────
+fastapi>=0.111.0
+uvicorn[standard]>=0.29.0      # ASGI server + websockets support
+python-multipart>=0.0.9        # Form / file upload support
+aiofiles>=23.0.0               # Async file serving (required by StaticFiles)
+
+# ── Utilities ─────────────────────────────────────────────────────────────────
+Pillow>=10.0.0                 # Image processing

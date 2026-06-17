@@ -3,10 +3,12 @@ SQLite CRUD operations cho bảng nhan_su
 """
 
 import sqlite3
+import sys
 import numpy as np
 from pathlib import Path
 from typing import Optional, List, Dict, Any
 
+sys.path.insert(0, str(Path(__file__).parent.parent))
 from config import DB_PATH
 
 
