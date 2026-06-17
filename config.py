@@ -33,10 +33,11 @@ TOP_K                = 1
 # ── Tracking ─────────────────────────────────────────────────────────────────
 TRACK_MAX_LOST       = 30
 TRACK_IOU_THRESHOLD  = 0.35
-TRACK_COOLDOWN       = 1.0
+TRACK_COOLDOWN       = 1.0        # giây: thời gian chờ tối thiểu giữa 2 lần re-embed
 TRACK_DELTA_CONF     = 0.1
 TRACK_AREA_RATIO     = 1.2
 TRACK_EMA_ALPHA      = 0.8
+MIN_FACE_AREA        = 3600       # pixel²: bỏ qua mặt nhỏ hơn ~60×60px
 
 # ── Bounding Box Colors (OpenCV BGR) ────────────────────────────────────────
 BBOX_COLOR_KNOWN   = (0, 230, 100)

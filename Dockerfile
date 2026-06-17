@@ -16,6 +16,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         libxrender1 \
         libgl1 \
         libgomp1 \
+        # MediaPipe OpenGL/EGL dependencies
+        libgles2 \
+        libegl1 \
         # Build tools (needed by some pip packages)
         build-essential \
         cmake \

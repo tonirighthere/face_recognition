@@ -1,0 +1,29 @@
+# Loại bỏ môi trường ảo Python
+venv/
+.venv/
+env/
+
+# Loại bỏ các file cache của Python
+**/__pycache__/
+**/*.pyc
+**/*.pyo
+**/*.pyd
+
+# Loại bỏ các thư mục dữ liệu đã được mount qua volumes
+storage/
+database/
+weights/
+
+# Loại bỏ các file cấu hình Git & IDE
+.git/
+.gitignore
+.github/
+.vscode/
+
+# Loại bỏ các file tạm thời, file cấu hình docker không cần thiết trong container
+23.0.0
+docker-compose.yml
+Dockerfile
+.dockerignore
+readme.md
+project_architecture.md
