@@ -19,9 +19,9 @@ services:
       # Persistent data: AI model weights
       - ./weights:/app/weights
 
-    ports:
-      # FastAPI Web UI + REST API + WebSocket
-      - "8000:8000"
+    # Không expose port ra ngoài — chỉ nginx mới gọi vào
+    expose:
+      - "8000"
 
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
@@ -35,3 +35,21 @@ services:
       options:
         max-size: "10m"
         max-file: "3"
+
+  nginx:
+    image: nginx:alpine
+    container_name: face_recognition_nginx
+    restart: unless-stopped
+    depends_on:
+      - face_recognition
+    ports:
+      - "80:80"    # HTTP → redirect sang HTTPS
+      - "443:443"  # HTTPS (camera, WebSocket)
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/certs:/etc/nginx/certs:ro
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "5m"
+        max-file: "2"
