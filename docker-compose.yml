@@ -19,9 +19,9 @@ services:
       # Persistent data: AI model weights
       - ./weights:/app/weights
 
-    # Không expose port ra ngoài — chỉ nginx mới gọi vào
-    expose:
-      - "8000"
+    # Map cổng 8000 ra ngoài host để localtunnel/ngrok truy cập trực tiếp
+    ports:
+      - "8000:8000"
 
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
