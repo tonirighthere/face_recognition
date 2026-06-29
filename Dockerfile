@@ -33,7 +33,7 @@ WORKDIR /app
 # ── Python dependencies (layer cache) ───────────────────────
 COPY requirements.txt .
 RUN pip install --upgrade pip --no-cache-dir && \
-    pip install --no-cache-dir -r requirements.txt
+    pip install --no-cache-dir --default-timeout=1000 --retries 10 -i https://pypi.tuna.tsinghua.edu.cn/simple -r requirements.txt
 
 # ── Application source ───────────────────────────────────────
 COPY . .
