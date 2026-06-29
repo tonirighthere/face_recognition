@@ -79,7 +79,14 @@ const cameraInactive = document.getElementById('camera-inactive');
 let mediaStream  = null;
 let ws           = null;
 let captureLoop  = null;
+let fpsTimer     = null;      // timer cập nhật hiển thị FPS định kỳ
+let renderLoop   = null;      // requestAnimationFrame ID cho render
 let isStreaming  = false;
+let pendingFrame = false;     // request-response: chỉ gửi khi đã nhận response
+let currentDetections = [];   // bbox cuối cùng nhận từ server
+let frameTimestamps = [];     // mảng lưu mốc thời gian nhận các frame trong 1 giây qua
+const lastKnownPersons = new Map();  // track_id → {name, sim} — chống log spam
+const interpolatedBboxes = new Map(); // track_id → {x1, y1, x2, y2, name, similarity, recognized}
 
 const btnStart = document.getElementById('btn-start-camera');
 const btnStop  = document.getElementById('btn-stop-camera');
@@ -107,14 +114,29 @@ async function startCamera() {
     btnStop.disabled  = false;
     isStreaming = true;
 
+    startRenderLoop();   // Bắt đầu vẽ canvas ~60 FPS
     connectWebSocket();
+
+    // Định kỳ 500ms cập nhật hiển thị chữ FPS một lần để chống nhấp nháy màn hình
+    fpsTimer = setInterval(() => {
+      const now = performance.now();
+      frameTimestamps = frameTimestamps.filter(t => now - t < 1000);
+      fpsDisplay.textContent = `${frameTimestamps.length} FPS`;
+    }, 500);
   } catch (e) {
     toast('Không thể truy cập camera: ' + e.message, 'error');
   }
 }
 
 function stopCamera() {
-  isStreaming = false;
+  isStreaming      = false;
+  pendingFrame     = false;
+  frameTimestamps  = [];
+  currentDetections = [];
+  lastKnownPersons.clear();
+  interpolatedBboxes.clear();
+  if (fpsTimer)    { clearInterval(fpsTimer); fpsTimer = null; }
+  if (renderLoop)  { cancelAnimationFrame(renderLoop); renderLoop = null; }
   if (captureLoop) { clearInterval(captureLoop); captureLoop = null; }
   if (ws)          { ws.close(); ws = null; }
   if (mediaStream) { mediaStream.getTracks().forEach(t => t.stop()); mediaStream = null; }
@@ -138,26 +160,21 @@ function connectWebSocket() {
   };
 
   ws.onmessage = e => {
+    pendingFrame = false;
     try {
       const data = JSON.parse(e.data);
       if (data.error) { console.warn('WS error:', data.error); return; }
 
-      // Draw annotated frame on canvas overlay
-      const img = new Image();
-      img.onload = () => {
-        canvas.width  = video.videoWidth  || 640;
-        canvas.height = video.videoHeight || 480;
-        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-      };
-      img.src = 'data:image/jpeg;base64,' + data.image_base64;
+      // Cập nhật detections — render loop sẽ tự vẽ lên canvas
+      currentDetections = data.detections || [];
+      
+      // Lưu mốc thời gian nhận frame (fpsTimer sẽ lọc và tính toán hiển thị sau)
+      frameTimestamps.push(performance.now());
+      
+      facesDisp.textContent  = `${currentDetections.length} khuôn mặt`;
 
-      fpsDisplay.textContent = `${data.fps ?? '--'} FPS`;
-      facesDisp.textContent  = `${(data.detections || []).length} khuôn mặt`;
-
-      // Log detections
-      if (data.detections && data.detections.length > 0) {
-        appendDetectionLogs(data.detections);
-      }
+      // Chỉ ghi log khi nhận diện thay đổi
+      if (currentDetections.length > 0) appendDetectionLogs(currentDetections);
     } catch {}
   };
 
@@ -170,12 +187,95 @@ function connectWebSocket() {
   };
 }
 
+/* ── Canvas render loop (chạy ở ~60 FPS, độc lập với WebSocket) ─────────── */
+function startRenderLoop() {
+  function frame() {
+    if (!isStreaming) return;
+    if (video.videoWidth) {
+      canvas.width  = video.videoWidth;
+      canvas.height = video.videoHeight;
+      // Vẽ raw video lên canvas
+      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+      // Cập nhật và nội suy bboxes
+      const activeIds = new Set(currentDetections.map(d => d.track_id));
+
+      // Xóa các track không còn active
+      for (const id of interpolatedBboxes.keys()) {
+        if (!activeIds.has(id)) {
+          interpolatedBboxes.delete(id);
+        }
+      }
+
+      // Cập nhật vị trí mới hoặc nội suy vị trí cũ
+      currentDetections.forEach(d => {
+        const id = d.track_id;
+        const [tx1, ty1, tx2, ty2] = d.bbox;
+        const lerpFactor = 0.20; // 20% di chuyển đến đích mỗi frame (mượt mà ở 60 FPS)
+
+        if (interpolatedBboxes.has(id)) {
+          const prev = interpolatedBboxes.get(id);
+          const x1 = prev.x1 + (tx1 - prev.x1) * lerpFactor;
+          const y1 = prev.y1 + (ty1 - prev.y1) * lerpFactor;
+          const x2 = prev.x2 + (tx2 - prev.x2) * lerpFactor;
+          const y2 = prev.y2 + (ty2 - prev.y2) * lerpFactor;
+          interpolatedBboxes.set(id, {
+            x1, y1, x2, y2,
+            name: d.name,
+            similarity: d.similarity,
+            recognized: d.recognized
+          });
+        } else {
+          // Khởi tạo nếu là track mới
+          interpolatedBboxes.set(id, {
+            x1: tx1, y1: ty1, x2: tx2, y2: ty2,
+            name: d.name,
+            similarity: d.similarity,
+            recognized: d.recognized
+          });
+        }
+      });
+
+      // Vẽ toàn bộ các bboxes đã nội suy
+      interpolatedBboxes.forEach(d => drawDetectionBox(d));
+    }
+    renderLoop = requestAnimationFrame(frame);
+  }
+  renderLoop = requestAnimationFrame(frame);
+}
+
+function drawDetectionBox(d) {
+  const { x1, y1, x2, y2, name, similarity, recognized } = d;
+  const isKnown = recognized;
+  const color   = isKnown ? '#00e664' : '#5050ff';
+  const label   = isKnown
+    ? `${name} (${(similarity * 100).toFixed(0)}%)`
+    : 'Unknown';
+
+  // Hộp bbox
+  ctx.strokeStyle = color;
+  ctx.lineWidth   = 2;
+  ctx.strokeRect(x1, y1, x2 - x1, y2 - y1);
+
+  // Nền label
+  ctx.font = 'bold 13px Inter, sans-serif';
+  const tw = ctx.measureText(label).width;
+  ctx.fillStyle = color;
+  ctx.fillRect(x1 - 1, y1 - 24, tw + 10, 24);
+
+  // Chữ label
+  ctx.fillStyle = '#ffffff';
+  ctx.fillText(label, x1 + 4, y1 - 7);
+}
+
 function startCapturing() {
   const offscreen = document.createElement('canvas');
   const offCtx    = offscreen.getContext('2d');
 
+  // Request-response pattern: chỉ gửi frame mới khi đã nhận phản hồi của frame trước.
+  // FPS tự động thích nghi: frame skip ~10-20ms, frame detect ~80-120ms (sau resize)
   captureLoop = setInterval(() => {
-    if (!ws || ws.readyState !== WebSocket.OPEN || !video.videoWidth) return;
+    if (!ws || ws.readyState !== WebSocket.OPEN || !video.videoWidth || pendingFrame) return;
 
     offscreen.width  = video.videoWidth;
     offscreen.height = video.videoHeight;
@@ -189,14 +289,15 @@ function startCapturing() {
       const reader = new FileReader();
       reader.onload = () => {
         const b64 = reader.result.split(',')[1];
-        if (ws && ws.readyState === WebSocket.OPEN) {
+        if (ws && ws.readyState === WebSocket.OPEN && !pendingFrame) {
           ws.send(JSON.stringify({ frame: b64, threshold, apply_filter: applyFilter }));
+          pendingFrame = true;
         }
       };
       reader.readAsDataURL(blob);
-    }, 'image/jpeg', 0.7);
+    }, 'image/jpeg', 0.6);  // Quality 0.6 vừa đủ, giảm bandwidth
 
-  }, 200);   // ~5 FPS to server (display stays smooth via canvas)
+  }, 16);   // Poll mỗi 16ms (~60 FPS check) nhưng chỉ gửi khi !pendingFrame
 }
 
 function appendDetectionLogs(detections) {
@@ -205,16 +306,32 @@ function appendDetectionLogs(detections) {
   if (empty) empty.remove();
 
   detections.forEach(d => {
-    if (!d.recognized) return;   // Only log known persons in sidebar
+    if (!d.recognized) {
+      // Nếu track vừa mất nhận diện → xóa cache
+      lastKnownPersons.delete(d.track_id);
+      return;
+    }
+
+    const prev = lastKnownPersons.get(d.track_id);
+    const SIM_IMPROVE_THRESHOLD = 0.02;   // Chỉ log khi similarity tăng >= 2%
+
+    // Bỏ qua nếu cùng người VÀ similarity không tăng đáng kể
+    if (prev && prev.name === d.name && d.similarity <= prev.similarity + SIM_IMPROVE_THRESHOLD) {
+      return;
+    }
+
+    // Cập nhật cache và ghi log
+    lastKnownPersons.set(d.track_id, { name: d.name, similarity: d.similarity });
+
     const item = document.createElement('div');
-    item.className = `log-item ${d.recognized ? 'known' : 'unknown'}`;
+    item.className = 'log-item known';
     item.innerHTML = `
-      <div class="log-name">${d.recognized ? '✅' : '❓'} ${d.name}</div>
+      <div class="log-name">✅ ${d.name}</div>
       <div class="log-sim">Độ tương đồng: ${(d.similarity * 100).toFixed(1)}%</div>
       <div class="log-time">${formatTime()}</div>
     `;
     log.insertBefore(item, log.firstChild);
-    // Keep max 50 log items
+    // Giữ tối đa 50 mục log
     while (log.children.length > 50) log.lastChild.remove();
   });
 }

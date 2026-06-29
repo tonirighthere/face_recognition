@@ -19,6 +19,8 @@ from typing import Optional
 import cv2
 import numpy as np
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, WebSocket, WebSocketDisconnect
+from PIL import Image, ImageDraw, ImageFont
+
 
 from api.dependencies import get_db, get_engine, get_store
 from config import (
@@ -26,11 +28,17 @@ from config import (
     BBOX_COLOR_KNOWN, BBOX_COLOR_UNKNOWN,
     TRACK_COOLDOWN, TRACK_IOU_THRESHOLD, TRACK_MAX_LOST,
     MIN_FACE_AREA,
+    SKIP_FRAME,
+    TRACK_DELTA_CONF, TRACK_AREA_RATIO, TRACK_EMA_ALPHA,
 )
+from utils.tracking_utils import should_re_embed, update_embedding_ema
 from core.tracker import SimpleTracker, Track
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/recognize", tags=["Recognize"])
+
+# Scale để resize ảnh trước khi detect (giảm tải MediaPipe)
+DETECT_SCALE = 0.5
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
@@ -43,8 +51,54 @@ def _decode_image(data: bytes) -> np.ndarray:
     return img
 
 
+def _draw_unicode_text_on_cv2(
+    img: np.ndarray,
+    text: str,
+    pos: tuple,
+    font_size: int = 14,
+    color: tuple = (255, 255, 255),
+    bg_color: tuple = (0, 229, 100),
+) -> np.ndarray:
+    """Vẽ text Unicode tiếng Việt có nền màu lên ảnh OpenCV (BGR) sử dụng Pillow."""
+    img_rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+    pil_img = Image.fromarray(img_rgb)
+    draw = ImageDraw.Draw(pil_img)
+
+    font = None
+    font_paths = [
+        "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+        "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
+        "C:\\Windows\\Fonts\\Arial.ttf",
+        "arial.ttf"
+    ]
+    for path in font_paths:
+        try:
+            font = ImageFont.truetype(path, font_size)
+            break
+        except Exception:
+            continue
+
+    if font is None:
+        font = ImageFont.load_default()
+
+    try:
+        left, top, right, bottom = draw.textbbox((0, 0), text, font=font)
+        tw = right - left
+        th = bottom - top
+    except AttributeError:
+        tw, th = draw.textsize(text, font=font)
+
+    x, y = pos
+    # Vẽ hộp nền chữ phía trên bounding box
+    draw.rectangle([x, y - th - 8, x + tw + 8, y], fill=bg_color)
+    # Vẽ text
+    draw.text((x + 4, y - th - 5), text, font=font, fill=color)
+
+    return cv2.cvtColor(np.array(pil_img), cv2.COLOR_RGB2BGR)
+
+
 def _draw_track(frame: np.ndarray, track: Track) -> None:
-    """Vẽ bbox + label lên frame theo trạng thái track."""
+    """Vẽ bbox + label lên frame theo trạng thái track (không dùng Unicode, chỉ giữ lại để tương thích nếu cần)."""
     x1, y1, x2, y2, _ = track.bbox
     color = BBOX_COLOR_KNOWN if track.recognized else BBOX_COLOR_UNKNOWN
 
@@ -53,7 +107,7 @@ def _draw_track(frame: np.ndarray, track: Track) -> None:
     if track.recognized and track.person_name:
         label = f"{track.person_name} ({track.similarity:.2f})"
     elif track.embedding is None:
-        label = "Analyzing..."   # chưa kịp embed lần đầu
+        label = "Analyzing..."
     else:
         label = "Unknown"
 
@@ -98,11 +152,9 @@ def _process_frame(
         cv2.rectangle(frame_bgr, (x1, y1), (x2, y2), color, 2)
 
         label = f"{name} ({sim:.2f})" if recognized else "Unknown"
-        (tw, th), _ = cv2.getTextSize(label, cv2.FONT_HERSHEY_SIMPLEX, 0.55, 2)
-        cv2.rectangle(frame_bgr, (x1, y1 - th - 8), (x1 + tw + 4, y1), color, -1)
-        cv2.putText(
-            frame_bgr, label, (x1 + 2, y1 - 4),
-            cv2.FONT_HERSHEY_SIMPLEX, 0.55, (255, 255, 255), 2, cv2.LINE_AA,
+        frame_bgr = _draw_unicode_text_on_cv2(
+            frame_bgr, label, (x1, y1),
+            font_size=14, color=(255, 255, 255), bg_color=color
         )
 
         results.append({
@@ -168,6 +220,7 @@ async def recognize_stream(websocket: WebSocket):
 
     t_prev = time.perf_counter()
     fps    = 0.0
+    frame_count = 0
 
     try:
         while True:
@@ -187,24 +240,40 @@ async def recognize_stream(websocket: WebSocket):
             # Decode frame
             try:
                 raw_bytes = base64.b64decode(frame_b64)
-                arr       = np.frombuffer(raw_bytes, np.uint8)
-                frame_bgr = cv2.imdecode(arr, cv2.IMREAD_COLOR)
-                if frame_bgr is None:
-                    continue
+                frame_bgr = _decode_image(raw_bytes)
             except Exception:
                 continue
 
-            # ── 1. Detect với quality filter bật sẵn ──────────────────────────
-            bboxes = engine.detect(frame_bgr, apply_filter=True)
+            frame_count += 1
+            is_detect_frame = (SKIP_FRAME <= 1) or (frame_count % SKIP_FRAME == 1)
 
-            # ── 2. Lọc diện tích tối thiểu ─────────────────────────────────────
-            bboxes = [
-                b for b in bboxes
-                if (b[2] - b[0]) * (b[3] - b[1]) >= MIN_FACE_AREA
-            ]
+            if is_detect_frame:
+                # ── 1. Resize xuống DETECT_SCALE để MediaPipe chạy nhanh hơn ───────────
+                h_orig, w_orig = frame_bgr.shape[:2]
+                detect_w = max(1, int(w_orig * DETECT_SCALE))
+                detect_h = max(1, int(h_orig * DETECT_SCALE))
+                detect_frame = cv2.resize(frame_bgr, (detect_w, detect_h))
 
-            # ── 3. Cập nhật tracker ────────────────────────────────────────────
-            tracks = tracker.update(bboxes)
+                # ── 2. Detect trên ảnh nhỏ, scale bbox về kích thước gốc ─────────
+                bboxes_small = engine.detect(detect_frame, apply_filter=True)
+                inv = 1.0 / DETECT_SCALE
+                bboxes = [
+                    (int(x1 * inv), int(y1 * inv),
+                     int(x2 * inv), int(y2 * inv), s)
+                    for x1, y1, x2, y2, s in bboxes_small
+                ]
+
+                # ── 3. Lọc diện tích tối thiểu (theo kích thước gốc) ─────────────────
+                bboxes = [
+                    b for b in bboxes
+                    if (b[2] - b[0]) * (b[3] - b[1]) >= MIN_FACE_AREA
+                ]
+
+                # ── 4. Cập nhật tracker ────────────────────────────────────────────
+                tracks = tracker.update(bboxes)
+            else:
+                # Dùng các track active cũ (không chạy detect)
+                tracks = tracker.active_tracks
 
             # ── 4. Nhận diện có điều kiện + vẽ ───────────────────────────────
             now        = time.time()
@@ -215,31 +284,66 @@ async def recognize_stream(websocket: WebSocket):
                 if track.lost > 0:
                     continue
 
+                x1, y1, x2, y2, score = track.bbox
+                current_area = (x2 - x1) * (y2 - y1)
+
                 need_embed = (
-                    track.embedding is None                              # chưa từng embed
-                    or (now - track.last_embed_time) >= TRACK_COOLDOWN  # hết cooldown
+                    is_detect_frame and (
+                        track.embedding is None                              # chưa từng embed
+                        or should_re_embed(
+                            track, current_area, score, now,
+                            cooldown=TRACK_COOLDOWN,
+                            delta_conf=TRACK_DELTA_CONF,
+                            area_ratio=TRACK_AREA_RATIO
+                        )
+                    )
                 )
 
                 if need_embed:
                     emb = engine.get_embedding(frame_bgr, track.bbox)
                     if emb is not None:
-                        track.embedding       = emb
+                        if track.embedding is None:
+                            track.embedding = emb
+                        else:
+                            # Áp dụng EMA smoothing để ổn định vector embedding qua các frame
+                            track.embedding = update_embedding_ema(
+                                track.embedding, emb, alpha=TRACK_EMA_ALPHA
+                            )
+
                         track.last_embed_time = now
 
-                        res = store.search_best(emb, threshold=threshold)
-                        if res is not None:
-                            track.person_id   = res[0]
-                            track.person_name = res[1]
-                            track.similarity  = res[2]
-                            track.recognized  = True
-                        else:
-                            track.person_id   = None
-                            track.person_name = None
-                            track.similarity  = 0.0
-                            track.recognized  = False
+                        # Cập nhật thông số chất lượng tốt nhất của track
+                        if current_area > track.best_area:
+                            track.best_area = current_area
+                        if score > track.best_conf:
+                            track.best_conf = score
 
-                # Vẽ lên frame (dùng cache nếu không re-embed)
-                _draw_track(frame_bgr, track)
+                        res     = store.search_best(track.embedding, threshold=threshold)
+                        new_sim = res[2] if res is not None else 0.0
+
+                        # Chỉ cập nhật nếu kết quả mới tốt hơn, hoặc nhận ra người khác,
+                        # hoặc lần đầu tiên nhận diện (track.similarity == 0)
+                        should_update = (
+                            track.similarity == 0.0            # lần đầu
+                            or new_sim > track.similarity      # chính xác hơn
+                            or (res is not None                # đổi sang người khác dù thấp hơn không đáng kể
+                                and res[0] != track.person_id)
+                        )
+
+                        if should_update:
+                            if res is not None:
+                                track.person_id   = res[0]
+                                track.person_name = res[1]
+                                track.similarity  = new_sim
+                                track.recognized  = True
+                            else:
+                                track.person_id   = None
+                                track.person_name = None
+                                track.similarity  = 0.0
+                                track.recognized  = False
+
+                # Không cần vẽ bbox lên server frame nữa vì client tự vẽ, tiết kiệm CPU
+                pass
 
                 x1, y1, x2, y2, score = track.bbox
                 detections.append({
@@ -252,19 +356,16 @@ async def recognize_stream(websocket: WebSocket):
                     "confidence": round(float(score), 4),
                 })
 
-            # ── FPS ────────────────────────────────────────────────────────────
+            # ── FPS ─────────────────────────────────────────────────────────────────
             now_perf = time.perf_counter()
             fps      = 1.0 / max(now_perf - t_prev, 1e-6)
             t_prev   = now_perf
 
-            # ── Encode và gửi ──────────────────────────────────────────────────
-            _, buf  = cv2.imencode(".jpg", frame_bgr, [cv2.IMWRITE_JPEG_QUALITY, 75])
-            img_b64 = base64.b64encode(buf).decode()
-
+            # ── Chỉ gửi JSON detections, KHÔNG encode ảnh về ──────────────────────────────
+            # Client tự vẽ bbox lên canvas trực tiếp từ video stream (nhanh hơn rất nhiều)
             await websocket.send_text(json.dumps({
-                "image_base64": img_b64,
-                "detections":   detections,
-                "fps":          round(fps, 1),
+                "detections": detections,
+                "fps":        round(fps, 1),
             }))
 
     except WebSocketDisconnect:

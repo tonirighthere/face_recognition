@@ -18,6 +18,8 @@ services:
       - ./storage:/app/storage
       # Persistent data: AI model weights
       - ./weights:/app/weights
+      # Development: Mount static folder to reflect frontend changes instantly
+      - ./static:/app/static
 
     # Map cổng 8000 ra ngoài host để localtunnel/ngrok truy cập trực tiếp
     ports:
